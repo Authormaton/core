@@ -1,0 +1,5 @@
+PyPDF2
+requests
+ipywidgets
+python-dotenv
+ipykernel
