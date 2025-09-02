@@ -6,6 +6,7 @@ Handles file saving, validation, and management for uploads.
 import os
 import uuid
 import tempfile
+import contextlib
 from typing import IO
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'uploads')
@@ -29,20 +30,22 @@ def save_upload_file(upload_file: IO, filename: str) -> str:
         raise ValueError("Unsafe file path.")
 
     # Write file atomically in chunks
+
     try:
         with tempfile.NamedTemporaryFile(dir=UPLOAD_DIR, delete=False) as tmp:
             for chunk in iter(lambda: upload_file.read(8192), b""):
                 tmp.write(chunk)
             temp_path = tmp.name
         os.replace(temp_path, final_path)
-        os.chmod(final_path, 0o600)
-    except Exception as e:
-        # Clean up temp file if something goes wrong
         try:
+            os.chmod(final_path, 0o600)
+        except OSError:
+            pass  # Best effort, ignore chmod errors
+    except OSError as e:
+        # Clean up temp file if something goes wrong
+        with contextlib.suppress(Exception):
             if 'temp_path' in locals() and os.path.exists(temp_path):
                 os.remove(temp_path)
-        except Exception:
-            pass
         raise IOError("Failed to save file securely.") from e
 
     return final_path
