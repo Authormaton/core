@@ -2,22 +2,35 @@
 Service for generating embeddings for text chunks using transformers.
 """
 
+
 from transformers import AutoTokenizer, AutoModel
 import torch
 from typing import List
+import threading
 
 # You can change the model name to a suitable sentence transformer
 MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
+
 _tokenizer = None
 _model = None
+_model_lock = threading.Lock()
+_device = "cuda" if torch.cuda.is_available() else "cpu"
 
 def get_model_and_tokenizer():
     global _tokenizer, _model
-    if _tokenizer is None or _model is None:
-        _tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        _model = AutoModel.from_pretrained(MODEL_NAME)
-    return _tokenizer, _model
+    if _tokenizer is not None and _model is not None:
+        return _tokenizer, _model
+    with _model_lock:
+        if _tokenizer is not None and _model is not None:
+            return _tokenizer, _model
+        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+        model = AutoModel.from_pretrained(MODEL_NAME)
+        model = model.to(_device)
+        model.eval()
+        _tokenizer = tokenizer
+        _model = model
+        return _tokenizer, _model
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
     """
