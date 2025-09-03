@@ -21,6 +21,14 @@ def test_chunk_text_empty():
     assert chunk_text("") == []
 
 def test_embed_texts_shape():
+    texts = ["hello world", "test embedding"]
+    embeddings = embed_texts(texts)
+    assert isinstance(embeddings, list)
+    assert len(embeddings) == 2
+    assert all(isinstance(vec, list) for vec in embeddings)
+    assert all(isinstance(x, float) for vec in embeddings for x in vec)
+    assert all(len(vec) > 0 for vec in embeddings)
+
 def test_chunk_text_invalid_params():
     # max_length <= 0
     with pytest.raises(ValueError, match="max_length must be greater than 0"):
