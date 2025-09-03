@@ -24,10 +24,20 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
     Generate embeddings for a list of texts.
     Returns a list of embedding vectors (as lists of floats).
     """
+    if not texts:
+        return []
     tokenizer, model = get_model_and_tokenizer()
+    model.eval()
     inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
+    device = next(model.parameters()).device
+    inputs = {k: v.to(device) for k, v in inputs.items()}
     with torch.no_grad():
         model_output = model(**inputs)
-    # Mean pooling
-    embeddings = model_output.last_hidden_state.mean(dim=1)
+    last_hidden = model_output.last_hidden_state
+    attention_mask = inputs["attention_mask"].float()
+    # Expand mask for broadcasting
+    mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden.size()).float()
+    sum_hidden = (last_hidden * mask_expanded).sum(dim=1)
+    mask_sum = mask_expanded.sum(dim=1).clamp(min=1e-9)
+    embeddings = sum_hidden / mask_sum
     return embeddings.cpu().tolist()

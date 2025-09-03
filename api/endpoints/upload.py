@@ -23,10 +23,12 @@ def upload_document(file: UploadFile = File(...)):  # noqa: B008
         parsing_status = "success"
         text_preview = None
         if file.content_type == "application/pdf":
+            import logging
             try:
                 text = extract_text_from_pdf(saved_path)
                 text_preview = text[:500] if text else None
-            except Exception:
+            except Exception as e:
+                logging.exception("Error parsing PDF file for preview: %s", saved_path)
                 parsing_status = "failed"
         elif file.content_type in {"text/plain", "text/markdown"}:
             try:

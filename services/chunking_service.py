@@ -9,6 +9,12 @@ def chunk_text(text: str, max_length: int = 500, overlap: int = 50):
     """
     if not text:
         return []
+    if max_length <= 0:
+        raise ValueError("max_length must be greater than 0.")
+    if overlap < 0:
+        raise ValueError("overlap must be >= 0.")
+    if overlap >= max_length:
+        raise ValueError("overlap must be less than max_length.")
     chunks = []
     start = 0
     while start < len(text):
