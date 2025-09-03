@@ -1,3 +1,14 @@
 authormaton/
 experimentalCode/.env
-__pycache__
+
+# Ignore Python cache
+# Ignore Python cache
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore test cache
+tests/__pycache__/
+data/uploads/
