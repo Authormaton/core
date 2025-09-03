@@ -19,7 +19,10 @@ def upload_document(file: UploadFile = File(...)):  # noqa: B008
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=415, detail="Unsupported file type.")
     try:
-        saved_path = save_upload_file(file.file, file.filename)
+        try:
+            saved_path = save_upload_file(file.file, file.filename)
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve)) from ve
         parsing_status = "success"
         text_preview = None
         if file.content_type == "application/pdf":
