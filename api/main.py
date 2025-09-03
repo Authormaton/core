@@ -13,7 +13,9 @@ def get_cors_origins():
 ALLOWED_ORIGINS = get_cors_origins()
 ALLOW_CREDENTIALS = False if ALLOWED_ORIGINS == ["*"] else True
 
+
 app = FastAPI(title="Authormaton Core AI Engine", version="1.0")
+
 # Root endpoint
 @app.get("/")
 def read_root():
@@ -27,6 +29,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register upload router
+from api.endpoints.upload import router as upload_router
+app.include_router(upload_router, prefix="/upload")
+app.include_router(upload_router, prefix="/upload")
 
 @app.get("/health")
 def health():
