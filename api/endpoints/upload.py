@@ -19,10 +19,7 @@ def upload_document(file: UploadFile = File(...)):  # noqa: B008
     if file.content_type not in allowed_types:
         raise HTTPException(status_code=415, detail="Unsupported file type.")
     try:
-        try:
-            saved_path = save_upload_file(file.file, file.filename)
-        except ValueError as ve:
-            raise HTTPException(status_code=400, detail=str(ve)) from ve
+        saved_path = save_upload_file(file.file, file.filename)
         parsing_status = "success"
         text_preview = None
         if file.content_type == "application/pdf":
@@ -32,17 +29,12 @@ def upload_document(file: UploadFile = File(...)):  # noqa: B008
             except Exception:
                 parsing_status = "failed"
         elif file.content_type in {"text/plain", "text/markdown"}:
-            import logging
             try:
-                with open(saved_path, "r", encoding="utf-8", errors="replace") as f:
-                    text = f.read(500)
-                text_preview = text if text else None
-            except UnicodeDecodeError as ude:
+                with open(saved_path, "r", encoding="utf-8") as f:
+                    text = f.read()
+                text_preview = text[:500] if text else None
+            except Exception:
                 parsing_status = "failed"
-                logging.exception("Unicode decode error while reading file for preview: %s", saved_path)
-            except OSError as ose:
-                parsing_status = "failed"
-                logging.exception("OS error while reading file for preview: %s", saved_path)
         return UploadResponse(
             filename=file.filename,
             message="File uploaded and parsed.",
