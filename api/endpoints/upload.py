@@ -20,6 +20,7 @@ def upload_document(file: UploadFile = File(...)):  # noqa: B008
         parsing_status = "success"
         text_preview = None
         if file.content_type == "application/pdf":
+            import logging
             try:
                 text = extract_text_from_pdf(saved_path)
                 text_preview = text[:500] if text else None
