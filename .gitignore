@@ -1,7 +1,6 @@
 authormaton/
 experimentalCode/.env
 .env
-pytest.ini
 # Ignore Python cache
 # Ignore Python cache
 __pycache__/

@@ -1,9 +1,5 @@
 import sys
 import os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-import sys
-import os
 import pytest
 from dotenv import load_dotenv
 from services.chunking_service import chunk_text
@@ -11,8 +7,6 @@ from services.embedding_service import embed_texts
 
 load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-
 def test_chunk_text_basic():
     text = "abcdefghijklmnopqrstuvwxyz"
     chunks = chunk_text(text, max_length=10, overlap=2)
@@ -34,7 +28,10 @@ def test_embed_texts_shape(mocker):
             type('FakeEmbedding', (), {'embedding': [0.4, 0.5, 0.6]})()
         ]
     })()
-    mocker.patch("openai.embeddings.create", return_value=fake_response)
+    mocker.patch("services.embedding_service.get_openai_api_key", return_value="sk-test")
+    mock_client = mocker.Mock()
+    mock_client.embeddings.create.return_value = fake_response
+    mocker.patch("services.embedding_service.OpenAI", return_value=mock_client)
     texts = ["hello world", "test embedding"]
     embeddings = embed_texts(texts)
     assert isinstance(embeddings, list)
@@ -60,7 +57,11 @@ def test_chunk_text_invalid_params():
         chunk_text("abc", max_length=5, overlap=6)
 import pytest
 
+import os
+import pytest
+
 @pytest.mark.integration
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
 def test_embed_texts_openai_live():
     texts = ["OpenAI test", "Embedding API"]
     embeddings = embed_texts(texts)
