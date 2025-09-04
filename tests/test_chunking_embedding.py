@@ -40,6 +40,7 @@ def test_embed_texts_shape(mocker):
     assert all(isinstance(x, float) for vec in embeddings for x in vec)
     assert all(len(vec) > 0 for vec in embeddings)
 
+
 def test_chunk_text_invalid_params():
     # max_length <= 0
     with pytest.raises(ValueError, match="max_length must be greater than 0"):
