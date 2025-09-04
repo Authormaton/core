@@ -6,8 +6,6 @@ Service for generating embeddings for text chunks using transformers.
 import os
 from typing import List
 from openai import OpenAI, APIConnectionError, APIError, AuthenticationError, RateLimitError
-from typing import List
-import os
 import time
 import random
 
