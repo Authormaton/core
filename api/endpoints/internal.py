@@ -2,13 +2,16 @@
 Internal API endpoint for secure processing of source materials and a prompt.
 """
 
+
+import os
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from typing import Optional
 
-# Replace with your actual internal API key or authentication logic
-INTERNAL_API_KEY = "your-secure-internal-key"
+
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 api_key_header = APIKeyHeader(name="X-Internal-API-Key", auto_error=False)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -20,7 +23,8 @@ class SourceMaterialRequest(BaseModel):
 
 # Dependency for internal authentication
 def verify_internal_api_key(api_key: str = Depends(api_key_header)):
-    if api_key != INTERNAL_API_KEY:
+    # Do not log or expose the secret
+    if not api_key or not OPENAI_API_KEY or not secrets.compare_digest(api_key, OPENAI_API_KEY):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing internal API key."

@@ -1,11 +1,16 @@
 """
 Unit tests for the internal API endpoint: /internal/process-material
 """
+
+import os
+from dotenv import load_dotenv
+load_dotenv()
 import pytest
 from fastapi.testclient import TestClient
 from api.main import app
 
-INTERNAL_API_KEY = "your-secure-internal-key"  # Must match the value in internal.py
+# Load the internal API key from environment variable to match the API
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 client = TestClient(app)
 
 
@@ -18,7 +23,7 @@ def test_process_material_success():
     response = client.post(
         "/internal/process-material",
         json=payload,
-        headers={"X-Internal-API-Key": INTERNAL_API_KEY}
+    headers={"X-Internal-API-Key": OPENAI_API_KEY}
     )
     assert response.status_code == 200
     data = response.json()
