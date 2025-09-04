@@ -3,11 +3,14 @@ Handles file saving, validation, and management for uploads.
 """
 
 
+
 import os
 import uuid
 import tempfile
 import contextlib
+import logging
 from typing import IO
+from services.exceptions import DocumentSaveError
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'data', 'uploads')
 
@@ -15,9 +18,11 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 def save_upload_file(upload_file: IO, filename: str) -> str:
     # Sanitize filename: remove path, reject empty/unsafe
+    logger = logging.getLogger(__name__)
     base = os.path.basename(filename)
     if not base or base in {'.', '..'} or any(c in base for c in '\/:*?"<>|'):
-        raise ValueError("Invalid filename.")
+        logger.error("Invalid filename for upload: %s", filename)
+        raise DocumentSaveError("Invalid filename.")
 
     # Generate a safe unique filename (preserve extension if present)
     ext = os.path.splitext(base)[1]
@@ -27,7 +32,8 @@ def save_upload_file(upload_file: IO, filename: str) -> str:
     # Ensure final path is within UPLOAD_DIR
     upload_dir_abs = os.path.abspath(UPLOAD_DIR)
     if not final_path.startswith(upload_dir_abs + os.sep):
-        raise ValueError("Unsafe file path.")
+        logger.error("Unsafe file path detected: %s", final_path)
+        raise DocumentSaveError("Unsafe file path.")
 
     # Write file atomically in chunks
 
@@ -42,10 +48,10 @@ def save_upload_file(upload_file: IO, filename: str) -> str:
         except OSError:
             pass  # Best effort, ignore chmod errors
     except OSError as e:
-        # Clean up temp file if something goes wrong
+        logger.exception("OSError during file save: %s", filename)
         with contextlib.suppress(Exception):
             if 'temp_path' in locals() and os.path.exists(temp_path):
                 os.remove(temp_path)
-        raise IOError("Failed to save file securely.") from e
+        raise DocumentSaveError("Failed to save file securely.") from e
 
     return final_path
