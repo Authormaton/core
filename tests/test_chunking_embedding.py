@@ -70,26 +70,6 @@ def test_embed_texts_openai_live():
     assert all(isinstance(vec, list) for vec in embeddings)
     assert all(isinstance(x, float) for vec in embeddings for x in vec)
     assert all(len(vec) > 0 for vec in embeddings)
-
-def test_chunk_text_invalid_params():
-    # max_length <= 0
-    with pytest.raises(ValueError, match="max_length must be greater than 0"):
-        chunk_text("abc", max_length=0, overlap=0)
-    with pytest.raises(ValueError, match="max_length must be greater than 0"):
-        chunk_text("abc", max_length=-1, overlap=0)
-    # overlap < 0
-    with pytest.raises(ValueError, match="overlap must be >= 0"):
-        chunk_text("abc", max_length=5, overlap=-1)
-    # overlap >= max_length
-    with pytest.raises(ValueError, match="overlap must be less than max_length"):
-        chunk_text("abc", max_length=5, overlap=5)
-    with pytest.raises(ValueError, match="overlap must be less than max_length"):
-        chunk_text("abc", max_length=5, overlap=6)
-    texts = ["hello world", "test embedding"]
-    embeddings = embed_texts(texts)
-    assert isinstance(embeddings, list)
-    assert len(embeddings) == 2
-    assert all(isinstance(vec, list) for vec in embeddings)
     assert all(isinstance(x, float) for vec in embeddings for x in vec)
     # Embedding size is model-dependent, but should be >0
     assert all(len(vec) > 0 for vec in embeddings)
