@@ -3,54 +3,41 @@ Service for generating embeddings for text chunks using transformers.
 """
 
 
-from transformers import AutoTokenizer, AutoModel
-import torch
+import os
 from typing import List
-import threading
+from openai import OpenAI, APIConnectionError, APIError, AuthenticationError, RateLimitError
+from typing import List
+import os
+import time
+import random
 
-# You can change the model name to a suitable sentence transformer
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+def get_openai_api_key() -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise ValueError("OPENAI_API_KEY not set in environment.")
+    return api_key
 
-
-_tokenizer = None
-_model = None
-_model_lock = threading.Lock()
-_device = "cuda" if torch.cuda.is_available() else "cpu"
-
-def get_model_and_tokenizer():
-    global _tokenizer, _model
-    if _tokenizer is not None and _model is not None:
-        return _tokenizer, _model
-    with _model_lock:
-        if _tokenizer is not None and _model is not None:
-            return _tokenizer, _model
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-        model = AutoModel.from_pretrained(MODEL_NAME)
-        model = model.to(_device)
-        model.eval()
-        _tokenizer = tokenizer
-        _model = model
-        return _tokenizer, _model
-
-def embed_texts(texts: List[str]) -> List[List[float]]:
+def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout: float = 30.0, max_retries: int = 2) -> List[List[float]]:
     """
-    Generate embeddings for a list of texts.
+    Generate embeddings for a list of texts using OpenAI's embedding API (v1 client).
     Returns a list of embedding vectors (as lists of floats).
+    Retries on rate limit, with exponential backoff.
     """
     if not texts:
         return []
-    tokenizer, model = get_model_and_tokenizer()
-    model.eval()
-    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
-    device = next(model.parameters()).device
-    inputs = {k: v.to(device) for k, v in inputs.items()}
-    with torch.no_grad():
-        model_output = model(**inputs)
-    last_hidden = model_output.last_hidden_state
-    attention_mask = inputs["attention_mask"].float()
-    # Expand mask for broadcasting
-    mask_expanded = attention_mask.unsqueeze(-1).expand(last_hidden.size()).float()
-    sum_hidden = (last_hidden * mask_expanded).sum(dim=1)
-    mask_sum = mask_expanded.sum(dim=1).clamp(min=1e-9)
-    embeddings = sum_hidden / mask_sum
-    return embeddings.cpu().tolist()
+    client = OpenAI(api_key=get_openai_api_key(), timeout=timeout, max_retries=max_retries)
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.embeddings.create(input=texts, model=model)
+            return [item.embedding for item in response.data]
+        except AuthenticationError as e:
+            # Credentials are invalid or expired
+            raise
+        except RateLimitError as e:
+            # Client will retry up to max_retries; bubble up if still failing
+            if attempt == max_retries:
+                raise
+            time.sleep(2 ** attempt + random.random())
+        except (APIConnectionError, APIError) as e:
+            # Network or other API errors
+            raise
