@@ -1,6 +1,8 @@
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+from services.logging_config import setup_logging
 
 # Parse CORS_ALLOW_ORIGINS from env (comma-separated)
 def get_cors_origins():
@@ -14,6 +16,8 @@ ALLOWED_ORIGINS = get_cors_origins()
 ALLOW_CREDENTIALS = False if ALLOWED_ORIGINS == ["*"] else True
 
 
+
+setup_logging()
 app = FastAPI(title="Authormaton Core AI Engine", version="1.0")
 
 # Root endpoint
