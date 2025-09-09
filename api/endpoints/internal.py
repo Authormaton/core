@@ -24,8 +24,9 @@ api_key_header = APIKeyHeader(name="X-Internal-API-Key", auto_error=False)
 router = APIRouter(prefix="/internal", tags=["internal"])
 
 
+
 class SourceMaterialRequest(BaseModel):
-    source_material: str  # Could be file content, text, or base64
+    source_material: str  # Base64-encoded file content for PDF/DOCX, or plain text
     prompt: str
     metadata: Optional[dict] = None
     file_type: Optional[str] = None  # e.g., 'pdf', 'docx', 'text'
@@ -49,18 +50,31 @@ def process_material(
     try:
         # Step 1: Parse document text
         text = None
-        if request.file_type == "pdf":
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(request.source_material.encode("utf-8"))
-                tmp.flush()
-                text = extract_text_from_pdf(tmp.name)
-        elif request.file_type == "docx":
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".docx") as tmp:
-                tmp.write(request.source_material.encode("utf-8"))
-                tmp.flush()
-                text = extract_text_from_docx(tmp.name)
-        else:
-            text = request.source_material
+
+        import base64
+        import os
+        tmp_file = None
+        try:
+            if request.file_type == "pdf":
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", mode="wb") as tmp:
+                    tmp.write(base64.b64decode(request.source_material))
+                    tmp.flush()
+                    tmp_file = tmp.name
+                    text = extract_text_from_pdf(tmp.name)
+            elif request.file_type == "docx":
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".docx", mode="wb") as tmp:
+                    tmp.write(base64.b64decode(request.source_material))
+                    tmp.flush()
+                    tmp_file = tmp.name
+                    text = extract_text_from_docx(tmp.name)
+            else:
+                text = request.source_material
+        finally:
+            if tmp_file and os.path.exists(tmp_file):
+                try:
+                    os.remove(tmp_file)
+                except Exception:
+                    pass
 
         if not text:
             raise HTTPException(status_code=400, detail="No text extracted from source material.")

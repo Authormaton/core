@@ -7,18 +7,35 @@ import os
 from typing import List
 
 class VectorDBClient:
-    def __init__(self, api_key: str, environment: str):
-        import pinecone
-        pinecone.init(api_key=api_key, environment=environment)
+    def __init__(self, api_key: str, environment: str = "us-east-1", cloud: str = "aws", region: str = "us-east-1"):
+        from pinecone import Client
+        self.client = Client(api_key=api_key, environment=environment)
+        self.cloud = cloud
+        self.region = region
         self.index = None
 
     def create_index(self, index_name: str, dimension: int):
-        import pinecone
-        if index_name not in pinecone.list_indexes():
-            pinecone.create_index(index_name, dimension=dimension)
-        self.index = pinecone.Index(index_name)
+        # List existing indexes
+        existing_indexes = [idx.name for idx in self.client.indexes.list()]
+        if index_name not in existing_indexes:
+            self.client.indexes.create(
+                name=index_name,
+                dimension=dimension,
+                spec={
+                    "cloud": self.cloud,
+                    "region": self.region
+                }
+            )
+        self.index = self.client.indexes.get(index_name)
 
     def upsert_vectors(self, vectors: List[List[float]], ids: List[str]):
+        # Input validation
+        if vectors is None or ids is None:
+            raise ValueError("vectors and ids must not be None.")
+        if not isinstance(vectors, list) or not isinstance(ids, list):
+            raise ValueError("vectors and ids must be lists.")
+        if len(vectors) != len(ids):
+            raise ValueError(f"vectors and ids must be lists of the same length. Got {len(vectors)} vectors and {len(ids)} ids.")
         if self.index:
             self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)])
 
