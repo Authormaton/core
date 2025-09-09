@@ -30,13 +30,19 @@ class VectorDBClient:
         if vectors is None or ids is None:
             raise ValueError("vectors and ids must not be None.")
         if not isinstance(vectors, list) or not isinstance(ids, list):
-            raise ValueError("vectors and ids must be lists.")
+            raise TypeError("vectors and ids must be lists.")
         if len(vectors) != len(ids):
-            raise ValueError(f"vectors and ids must be lists of the same length. Got {len(vectors)} vectors and {len(ids)} ids.")
-        if self.index:
-            self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)])
+            raise ValueError("vectors and ids must have the same length.")
+        if self.dimension is not None and any(len(v) != self.dimension for v in vectors):
+            raise ValueError("vector dimensionality mismatch with index.")
+        if not self.index:
+            raise RuntimeError("Index is not initialized. Call create_index first.")
+        # Upsert format may vary by pinecone-client version.
+        self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)])
 
     def query(self, vector: List[float], top_k: int = 5):
-        if self.index:
-            return self.index.query(vector=vector, top_k=top_k)
-        return None
+        if not self.index:
+            raise RuntimeError("Index is not initialized. Call create_index first.")
+        if self.dimension is not None and len(vector) != self.dimension:
+            raise ValueError("query vector dimensionality mismatch with index.")
+        return self.index.query(vector=vector, top_k=top_k)

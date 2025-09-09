@@ -62,9 +62,9 @@ def process_material(
             if request.file_type == "pdf":
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", mode="wb") as tmp:
                     try:
-                        data = base64.b64decode(request.source_material)
-                    except (binascii.Error, ValueError) as decode_err:
-                        raise HTTPException(status_code=400, detail="Invalid base64-encoded source_material for PDF upload.")
+                        data = base64.b64decode(request.source_material, validate=True)
+                    except (binascii.Error, ValueError) as err:
+                        raise HTTPException(status_code=400, detail="Invalid base64-encoded source_material for PDF upload.") from err
                     tmp.write(data)
                     tmp.flush()
                     tmp_file = tmp.name
@@ -72,9 +72,9 @@ def process_material(
             elif request.file_type == "docx":
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".docx", mode="wb") as tmp:
                     try:
-                        data = base64.b64decode(request.source_material)
-                    except (binascii.Error, ValueError) as decode_err:
-                        raise HTTPException(status_code=400, detail="Invalid base64-encoded source_material for DOCX upload.")
+                        data = base64.b64decode(request.source_material, validate=True)
+                    except (binascii.Error, ValueError) as err:
+                        raise HTTPException(status_code=400, detail="Invalid base64-encoded source_material for DOCX upload.") from err
                     tmp.write(data)
                     tmp.flush()
                     tmp_file = tmp.name
