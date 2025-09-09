@@ -8,25 +8,22 @@ from typing import List
 
 class VectorDBClient:
     def __init__(self, api_key: str, environment: str = "us-east-1", cloud: str = "aws", region: str = "us-east-1"):
-        from pinecone import Client
-        self.client = Client(api_key=api_key, environment=environment)
+        from pinecone import Pinecone
+        self.pc = Pinecone(api_key=api_key)  # environment unused for serverless
         self.cloud = cloud
         self.region = region
         self.index = None
 
     def create_index(self, index_name: str, dimension: int):
-        # List existing indexes
-        existing_indexes = [idx.name for idx in self.client.indexes.list()]
-        if index_name not in existing_indexes:
-            self.client.indexes.create(
+        from pinecone import ServerlessSpec
+        existing = [idx.name for idx in self.pc.list_indexes()]
+        if index_name not in existing:
+            self.pc.create_index(
                 name=index_name,
                 dimension=dimension,
-                spec={
-                    "cloud": self.cloud,
-                    "region": self.region
-                }
+                spec=ServerlessSpec(cloud=self.cloud, region=self.region),
             )
-        self.index = self.client.indexes.get(index_name)
+        self.index = self.pc.Index(index_name)
 
     def upsert_vectors(self, vectors: List[List[float]], ids: List[str]):
         # Input validation

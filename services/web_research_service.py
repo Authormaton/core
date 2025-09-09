@@ -3,26 +3,13 @@ Service for gathering information from the internet and verifying sources.
 """
 
 import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urlparse
-
-TRUSTED_DOMAIN_SUFFIXES = [".edu", ".gov"]
-TRUSTED_BASE_DOMAINS = [
-    "wikipedia.org",
-    "ieee.org",
-    "acm.org",
-    "nature.com",
-    "sciencedirect.com"
-]
-
-DEFAULT_HTTP_TIMEOUT = 10  # seconds
-DEFAULT_USER_AGENT = "CoreWebResearch/1.0"
-
-class WebResearchService:
-    def __init__(self):
-        pass
 import logging
-import requests
+from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
+
+# Constants (define if missing)
+DEFAULT_HTTP_TIMEOUT = 10
+DEFAULT_USER_AGENT = "CoreWebResearch/1.0"
 
 class WebResearchService:
     def __init__(self, timeout: int = DEFAULT_HTTP_TIMEOUT, user_agent: str = DEFAULT_USER_AGENT):
@@ -62,7 +49,6 @@ class WebResearchService:
             results.append({"url": url, "snippet": snippet, "verified": verified})
         return results
 
-    def fetch_and_extract(self, url: str, timeout: int = DEFAULT_HTTP_TIMEOUT, user_agent: str = DEFAULT_USER_AGENT) -> str:
     def fetch_and_extract(self, url: str) -> str:
         try:
             resp = self.session.get(url, timeout=self.timeout)

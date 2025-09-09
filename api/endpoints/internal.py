@@ -18,8 +18,12 @@ from services.embedding_service import embed_texts
 from services.vector_db_service import VectorDBClient
 
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")  # used by embedding service
+INTERNAL_API_KEY = os.environ.get("INTERNAL_API_KEY")
 api_key_header = APIKeyHeader(name="X-Internal-API-Key", auto_error=False)
+
+if not INTERNAL_API_KEY:
+    raise RuntimeError("INTERNAL_API_KEY environment variable is required for internal API authentication.")
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -34,7 +38,7 @@ class SourceMaterialRequest(BaseModel):
 # Dependency for internal authentication
 def verify_internal_api_key(api_key: str = Depends(api_key_header)):
     # Do not log or expose the secret
-    if not api_key or not OPENAI_API_KEY or not secrets.compare_digest(api_key, OPENAI_API_KEY):
+    if not api_key or not INTERNAL_API_KEY or not secrets.compare_digest(api_key, INTERNAL_API_KEY):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing internal API key."
@@ -52,18 +56,26 @@ def process_material(
         text = None
 
         import base64
-        import os
+        import binascii
         tmp_file = None
         try:
             if request.file_type == "pdf":
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf", mode="wb") as tmp:
-                    tmp.write(base64.b64decode(request.source_material))
+                    try:
+                        data = base64.b64decode(request.source_material)
+                    except (binascii.Error, ValueError) as decode_err:
+                        raise HTTPException(status_code=400, detail="Invalid base64-encoded source_material for PDF upload.")
+                    tmp.write(data)
                     tmp.flush()
                     tmp_file = tmp.name
                     text = extract_text_from_pdf(tmp.name)
             elif request.file_type == "docx":
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".docx", mode="wb") as tmp:
-                    tmp.write(base64.b64decode(request.source_material))
+                    try:
+                        data = base64.b64decode(request.source_material)
+                    except (binascii.Error, ValueError) as decode_err:
+                        raise HTTPException(status_code=400, detail="Invalid base64-encoded source_material for DOCX upload.")
+                    tmp.write(data)
                     tmp.flush()
                     tmp_file = tmp.name
                     text = extract_text_from_docx(tmp.name)
