@@ -7,12 +7,22 @@ import os
 from typing import List
 
 class VectorDBClient:
-    def __init__(self, api_key: str, environment: str = "us-east-1", cloud: str = "aws", region: str = "us-east-1"):
+    def __init__(self, api_key: str, dimension: int = None, cloud: str = "aws", region: str = "us-east-1", environment: str = None):
+        """
+        Initialize Pinecone client for serverless (cloud/region) or legacy (environment).
+        :param api_key: Pinecone API key
+        :param dimension: Vector dimension (required for index ops)
+        :param cloud: Serverless cloud provider (default 'aws')
+        :param region: Serverless region (default 'us-east-1')
+        :param environment: Legacy environment (optional, unused for serverless)
+        """
         from pinecone import Pinecone
-        self.pc = Pinecone(api_key=api_key)  # environment unused for serverless
+        self.pc = Pinecone(api_key=api_key)  # For serverless, environment is ignored
         self.cloud = cloud
         self.region = region
+        self.environment = environment
         self.index = None
+        self.dimension = dimension  # Must be set for upsert/query; can be set at index creation
 
     def create_index(self, index_name: str, dimension: int):
         from pinecone import ServerlessSpec

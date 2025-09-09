@@ -120,6 +120,9 @@ def process_material(
             "num_chunks": len(chunks),
             "draft_preview": draft,
         }
+    except HTTPException as e:
+        # Preserve intended status codes/messages
+        raise
     except Exception as e:
         logger.exception("Error in process_material pipeline")
-        raise HTTPException(status_code=500, detail=f"Internal error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error.") from e
