@@ -8,6 +8,7 @@ from typing import List
 from openai import OpenAI, APIConnectionError, APIError, AuthenticationError, RateLimitError
 import time
 import random
+from config.settings import settings
 
 def get_openai_api_key() -> str:
     api_key = os.getenv("OPENAI_API_KEY")
@@ -39,3 +40,24 @@ def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout
         except (APIConnectionError, APIError) as e:
             # Network or other API errors
             raise
+
+def embed_texts_batched(texts: List[str]) -> List[List[float]]:
+    batch_size = settings.embed_batch_size
+    model = settings.embedding_model
+    expected_dim = settings.embedding_dimension
+    all_vectors = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i+batch_size]
+        for attempt in range(4):
+            try:
+                vectors = embed_texts(batch, model=model)
+                if any(len(vec) != expected_dim for vec in vectors):
+                    raise ValueError("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension")
+                all_vectors.extend(vectors)
+                break
+            except Exception as e:
+                if attempt < 3:
+                    time.sleep(2 ** attempt)
+                else:
+                    raise
+    return all_vectors
