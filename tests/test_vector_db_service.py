@@ -60,9 +60,18 @@ class MockIndex:
 
 def test_ensure_index_idempotent(monkeypatch):
     svc = VectorDBService()
-    monkeypatch.setattr(svc, 'index', MockIndex(svc.embedding_dimension))
+    # Simulate: first call creates the index; second call sees it and skips creation.
+    mock_pc.create_index.reset_mock()
+    import types
+    mock_pc.list_indexes.side_effect = [
+        [],
+        [types.SimpleNamespace(name=dummy_config.settings.pinecone_index_name)],
+    ]
+
     svc.ensure_index(svc.embedding_dimension)
     svc.ensure_index(svc.embedding_dimension)
+    # Should only ever create the index once
+    assert mock_pc.create_index.call_count == 1
     assert svc.index.dimension == svc.embedding_dimension
 
 def test_upsert_dimension_guard(monkeypatch):
