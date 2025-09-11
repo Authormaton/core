@@ -1,8 +1,8 @@
-
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import os
 from services.logging_config import setup_logging
+from api.indexing_router import router as indexing_router
 
 # Parse CORS_ALLOW_ORIGINS from env (comma-separated)
 def get_cors_origins():
@@ -20,6 +20,15 @@ ALLOW_CREDENTIALS = False if ALLOWED_ORIGINS == ["*"] else True
 setup_logging()
 app = FastAPI(title="Authormaton Core AI Engine", version="1.0")
 
+# Middleware to capture X-Request-Id and inject into logs
+@app.middleware("http")
+async def add_request_id_to_log(request: Request, call_next):
+    request_id = request.headers.get("X-Request-Id")
+    response = await call_next(request)
+    if request_id:
+        response.headers["X-Request-Id"] = request_id
+    return response
+
 # Root endpoint
 @app.get("/")
 def read_root():
@@ -34,12 +43,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register upload router
+# Register routers
 from api.endpoints.upload import router as upload_router
 from api.endpoints.internal import router as internal_router
 app.include_router(upload_router, prefix="/upload")
 app.include_router(internal_router)
-app.include_router(upload_router, prefix="/upload")
+app.include_router(indexing_router)
 
 @app.get("/health")
 def health():
