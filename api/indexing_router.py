@@ -4,7 +4,7 @@ Indexing router for /internal/index endpoint.
 from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel
 from config.settings import settings
-from services.vector_db_service import VectorDBService
+from services.vector_db_service import VectorDBClient
 from services.embedding_service import embed_texts_batched
 from services.chunking_service import chunk_text
 from services.parsing_service import extract_text_from_pdf, extract_text_from_docx
@@ -25,7 +25,22 @@ class IndexResponse(BaseModel):
 
 @router.post("/index", response_model=IndexResponse, status_code=201)
 def index(request: IndexRequest, req: Request):
-    vdb = VectorDBService()
+    import logging
+    logger = logging.getLogger("indexing_router")
+    vdb = VectorDBClient()
+    logger.info("Pinecone VectorDBClient instantiated.")
+    # Ensure index is created before upsert
+    import re
+    def sanitize_index_name(name: str) -> str:
+        name = name.lower()
+        name = re.sub(r'[^a-z0-9\-]', '-', name)
+        name = re.sub(r'-+', '-', name)
+        name = name.strip('-')
+        return name
+
+    index_name = sanitize_index_name(request.project_id)
+    vdb.create_index(index_name=index_name)
+    logger.info(f"Pinecone index ensured for project_id={request.project_id}.")
     indexed_chunks = 0
     sources_indexed = 0
     skipped_sources = 0
@@ -68,10 +83,12 @@ def index(request: IndexRequest, req: Request):
             raise HTTPException(status_code=500, detail="EMBEDDING_DIMENSION_MISMATCH")
         # Upsert
         try:
-            vdb.upsert(namespace=request.project_id, ids=ids, vectors=vectors, metadata=metadata)
+            logger.info(f"Calling Pinecone upsert_vectors for project_id={request.project_id}, {len(ids)} vectors.")
+            vdb.upsert_vectors(vectors, ids)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
-        except Exception:
+        except Exception as e:
+            logger.error(f"Pinecone upsert_vectors failed: {e}")
             raise HTTPException(status_code=500, detail="VECTOR_DB_UPSERT_FAILED")
         indexed_chunks += len(chunks)
         sources_indexed += 1
