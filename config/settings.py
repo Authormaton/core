@@ -5,7 +5,8 @@ Automatically loads environment variables from .env for local development.
 """
 import os
 from pydantic_settings import BaseSettings
-from pydantic import SecretStr, ValidationError
+from pydantic import SecretStr, ValidationError, Field
+from typing import Optional
 import sys
 try:
     from dotenv import load_dotenv
@@ -24,6 +25,13 @@ class Settings(BaseSettings):
     embedding_dimension: int = 3072
     embed_batch_size: int = 128
     max_upload_mb: int = 25
+    
+    # Web search settings
+    web_search_engine: str = os.environ.get("WEB_SEARCH_ENGINE", "dummy")  # Default to dummy provider if not specified
+    tavily_api_key: Optional[SecretStr] = None
+    bing_api_key: Optional[SecretStr] = None
+    max_fetch_concurrency: int = 4
+    default_top_k_results: int = 8
 
 try:
     settings = Settings()
