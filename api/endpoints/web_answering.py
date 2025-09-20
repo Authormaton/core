@@ -136,8 +136,6 @@ async def web_search_answer(
     # Track overall execution time
     start_time = time.time()
     
-    try:
-    # Initialize services
     # Initialize services
     try:
         search_service = WebSearchService()
@@ -149,7 +147,10 @@ async def web_search_answer(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Service initialization error: {str(e)}"
-        )        # 1. Search phase
+        )
+    
+    try:
+        # 1. Search phase
         search_start = time.time()
         try:
             search_results = await asyncio.wait_for(

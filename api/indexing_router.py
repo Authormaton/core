@@ -51,6 +51,7 @@ def index(request: IndexRequest, req: Request):
         except Exception:
             raise HTTPException(status_code=415, detail="UNSUPPORTED_FILE_TYPE")
         ids = [f"{source_id}:{i}" for i in range(len(chunks))]
+        # Prepare metadata for future implementation that will support metadata
         metadata = [{
             "project_id": request.project_id,
             "source_id": source_id,
@@ -59,6 +60,7 @@ def index(request: IndexRequest, req: Request):
             "chunk_id": ids[i],
             "char_span": [0, len(chunks[i])]
         } for i in range(len(chunks))]
+        # TODO: Add metadata support once VectorDBService supports it
         # Embed
         try:
             vectors = embed_texts_batched(chunks)
@@ -66,13 +68,17 @@ def index(request: IndexRequest, req: Request):
             raise HTTPException(status_code=422, detail=str(e))
         except Exception:
             raise HTTPException(status_code=500, detail="EMBEDDING_DIMENSION_MISMATCH")
-        # Upsert
+        # Create index if needed, then upsert vectors
         try:
-            vdb.upsert(namespace=request.project_id, ids=ids, vectors=vectors, metadata=metadata)
+            # Ensure index is initialized first
+            vdb.create_index()
+            # Then upsert vectors with the proper API
+            vdb.upsert_vectors(vectors=vectors, ids=ids)
+            # Note: metadata support will be added in a follow-up
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e))
-        except Exception:
-            raise HTTPException(status_code=500, detail="VECTOR_DB_UPSERT_FAILED")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"VECTOR_DB_OPERATION_FAILED: {str(e)}")
         indexed_chunks += len(chunks)
         sources_indexed += 1
     return IndexResponse(

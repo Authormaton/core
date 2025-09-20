@@ -180,14 +180,24 @@ class TavilySearchProvider(SearchProvider):
             
             search_results = []
             for idx, result in enumerate(results):
+                # Extract site_name from URL when domain is missing
+                site = result.get("domain")
+                if not site:
+                    try:
+                        from urllib.parse import urlparse  # Local import to avoid module load failures
+                        site = urlparse(result.get("url", "")).netloc or None
+                    except Exception:
+                        site = None
+                
                 search_result = SearchResult(
                     url=result.get("url", ""),
                     title=result.get("title"),
-                    site_name=result.get("domain"),
-                    snippet=result.get("description"),
+                    site_name=site,
+                    snippet=result.get("description") or result.get("content"),
                     published_at=result.get("published_date"),
-                    # Use position as score if not provided
-                    score=result.get("relevance_score", 1.0 - (idx / (len(results) or 1))),
+                    # Prefer Tavily's score; fallback to position-based score
+                    score=(result.get("score") if isinstance(result.get("score"), (int, float)) else None) 
+                         or (1.0 - (idx / (len(results) or 1))),
                     provider_meta={"tavily_id": result.get("id")} if "id" in result else {}
                 )
                 search_results.append(search_result)

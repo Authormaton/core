@@ -1,7 +1,7 @@
 authormaton/
 experimentalCode/.env
 .env
-.env.example
+
 # Ignore Python cache
 
 __pycache__/

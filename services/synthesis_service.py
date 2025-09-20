@@ -12,7 +12,7 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set, Tuple, Any
 
-from openai import OpenAI
+from openai import AsyncOpenAI
 from services.ranking_service import RankedEvidence
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class SynthesisService:
             raise ValueError("OpenAI API key is required but not provided")
         
         self.model = model
-        self.client = OpenAI(api_key=self.api_key)
+        self.client = AsyncOpenAI(api_key=self.api_key, timeout=30.0, max_retries=2)
     
     def _build_system_prompt(self) -> str:
         """Build the system prompt for the synthesis."""
@@ -174,7 +174,7 @@ class SynthesisService:
         start_time = time.time()
         try:
             # Call OpenAI API
-            response = self.client.chat.completions.create(
+            response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -207,14 +207,14 @@ class SynthesisService:
                 generation_ms=generation_ms
             )
             
-        except Exception as e:
-            logger.error(f"Error generating answer: {str(e)}")
+        except Exception:
+            # Log full exception traceback with query context
+            logger.exception(f"Error generating answer for query: '{query[:100]}...' (truncated)")
             
-            # Return a fallback result
+            # Return a generic fallback result without exposing exception details
             fallback_answer = (
-                f"I apologize, but I encountered an error while generating an answer to your question: \"{query}\"\n\n"
-                f"Error: {str(e)}\n\n"
-                f"Please try again with a different query or contact support if the problem persists."
+                "I'm sorry, but I encountered an internal error while generating your answer. "
+                "Please try again with a different query or contact support if the problem persists."
             )
             
             return SynthesisResult(
