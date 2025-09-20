@@ -4,7 +4,7 @@ Indexing router for /internal/index endpoint.
 from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel
 from config.settings import settings
-from services.vector_db_service import VectorDBService
+from services.vector_db_service import VectorDBClient as VectorDBService
 from services.embedding_service import embed_texts_batched
 from services.chunking_service import chunk_text
 from services.parsing_service import extract_text_from_pdf, extract_text_from_docx

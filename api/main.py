@@ -46,8 +46,10 @@ app.add_middleware(
 # Register routers
 from api.endpoints.upload import router as upload_router
 from api.endpoints.internal import router as internal_router
+from api.endpoints.web_answering import router as web_answering_router
 app.include_router(upload_router, prefix="/upload")
 app.include_router(internal_router)
+app.include_router(web_answering_router, prefix="/internal", tags=["websearch"])
 app.include_router(indexing_router)
 
 @app.get("/health")
