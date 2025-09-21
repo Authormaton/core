@@ -6,6 +6,7 @@ Concurrently fetches pages with semaphore-based rate limiting.
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
 import re
 import time
@@ -72,6 +73,33 @@ class WebFetchService:
             return domain
         except Exception:
             return ""
+    
+    def _is_url_allowed(self, url: str) -> bool:
+        """
+        Check if a URL is safe to fetch (SSRF protection).
+        
+        Args:
+            url: The URL to validate
+            
+        Returns:
+            True if URL is safe to fetch, False otherwise
+        """
+        try:
+            p = urlparse(url)
+            if p.scheme not in ("http", "https"):
+                return False
+            if not p.hostname or p.username or p.password:
+                return False
+            try:
+                ip = ipaddress.ip_address(p.hostname)
+                if not ip.is_global:
+                    return False
+            except ValueError:
+                # Hostname; DNS resolution checks can be added later if needed.
+                pass
+            return True
+        except Exception:
+            return False
     
     def _sanitize_html_fallback(self, html: str) -> str:
         """
@@ -151,6 +179,12 @@ class WebFetchService:
                 site_name=site_name,
                 fetch_ms=0
             )
+            
+            # SSRF guard
+            if not self._is_url_allowed(url):
+                fetched_doc.fetch_ms = int((time.time() - start_time) * 1000)
+                logger.warning("Blocked potentially unsafe URL: %s", url)
+                return fetched_doc
             
             try:
                 async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
