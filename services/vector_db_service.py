@@ -47,6 +47,27 @@ class VectorDBClient:
         if not self.index:
             raise RuntimeError("Index is not initialized. Call create_index first.")
         self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)])
+    
+    def upsert(self, namespace, ids, vectors, metadata=None):
+        """
+        Upsert vectors into the index, ensuring index is created and metadata is validated.
+        """
+        if self.index is None:
+            self.create_index()
+        if not (len(ids) == len(vectors)):
+            raise ValueError("ids and vectors must have the same length")
+        if metadata is not None and len(metadata) != len(ids):
+            raise ValueError("metadata length must match ids/vectors length")
+        items = []
+        for i, (id_, vector) in enumerate(zip(ids, vectors)):
+            item = {
+                "id": id_,
+                "values": vector
+            }
+            if metadata is not None:
+                item["metadata"] = metadata[i]
+            items.append(item)
+        self.index.upsert(vectors=items, namespace=namespace)
 
     def query(self, vector: List[float], top_k: int = 5):
         if not self.index:
