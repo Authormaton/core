@@ -177,21 +177,26 @@ class TavilySearchProvider(SearchProvider):
 
             data = response.json()
             results = data.get("results", [])
-            
+            request_id = data.get("request_id")
+
             search_results = []
             for idx, result in enumerate(results):
+                url = result.get("url", "")
                 search_result = SearchResult(
-                    url=result.get("url", ""),
+                    url=url,
                     title=result.get("title"),
-                    site_name=result.get("domain"),
-                    snippet=result.get("description"),
-                    published_at=result.get("published_date"),
-                    # Use position as score if not provided
-                    score=result.get("relevance_score", 1.0 - (idx / (len(results) or 1))),
-                    provider_meta={"tavily_id": result.get("id")} if "id" in result else {}
+                    site_name=(url.split("/")[2] if "://" in url else None),
+                    snippet=result.get("content"),
+                    published_at=None,
+                    score=result.get("score", 1.0 - (idx / (len(results) or 1))),
+                    provider_meta={k: v for k, v in {
+                        "favicon": result.get("favicon"),
+                        "request_id": request_id,
+                        "provider": "tavily",
+                    }.items() if v is not None}
                 )
                 search_results.append(search_result)
-            
+
             return search_results
 
 class WebSearchService:
