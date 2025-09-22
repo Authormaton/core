@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Set, Tuple, Any
 
 from openai import OpenAI
 from services.ranking_service import RankedEvidence
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +46,8 @@ class SynthesisService:
             raise ValueError("OpenAI API key is required but not provided")
         
         self.model = model
-        self.client = OpenAI(api_key=self.api_key)
-    
+        # Set a sane default timeout; endpoint also wraps with asyncio.wait_for
+        self.client = AsyncOpenAI(api_key=self.api_key, timeout=30.0)
     def _build_system_prompt(self) -> str:
         """Build the system prompt for the synthesis."""
         return (
@@ -188,17 +189,20 @@ class SynthesisService:
             answer = response.choices[0].message.content
             
             # Calculate token usage
-            prompt_tokens = response.usage.prompt_tokens
-            completion_tokens = response.usage.completion_tokens
-            
+            prompt_tokens = getattr(response.usage, "prompt_tokens", 0) or 0
+            completion_tokens = getattr(response.usage, "completion_tokens", 0) or 0
+
             # Extract citation IDs
             used_citation_ids = self._extract_citation_ids(answer)
-            
+
             # Calculate generation time
             generation_ms = int((time.time() - start_time) * 1000)
-            
-            logger.info(f"Generated answer in {generation_ms}ms, {completion_tokens} tokens, {len(used_citation_ids)} citations")
-            
+
+            logger.info(
+                "Generated answer in %dms, %d tokens, %d citations",
+                generation_ms, completion_tokens, len(used_citation_ids)
+            )
+
             return SynthesisResult(
                 answer_markdown=answer,
                 used_citation_ids=used_citation_ids,
@@ -206,17 +210,16 @@ class SynthesisService:
                 completion_tokens=completion_tokens,
                 generation_ms=generation_ms
             )
-            
-        except Exception as e:
-            logger.error(f"Error generating answer: {str(e)}")
-            
+
+        except Exception:
+            logger.exception("Error generating answer")
+
             # Return a fallback result
             fallback_answer = (
-                f"I apologize, but I encountered an error while generating an answer to your question: \"{query}\"\n\n"
-                f"Error: {str(e)}\n\n"
-                f"Please try again with a different query or contact support if the problem persists."
+                "I encountered an internal error while generating the answer. "
+                "Please try again or contact support if the problem persists."
             )
-            
+
             return SynthesisResult(
                 answer_markdown=fallback_answer,
                 used_citation_ids=set(),

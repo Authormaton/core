@@ -83,13 +83,19 @@ class RankingService:
         query_vec = np.array(query_embedding)
         passage_vecs = np.array(passage_embeddings)
         
-        # Normalize vectors
-        query_vec = query_vec / np.linalg.norm(query_vec)
-        passage_vecs = passage_vecs / np.linalg.norm(passage_vecs, axis=1, keepdims=True)
-        
+        # Normalize vectors with zero-norm guards
+        q_norm = np.linalg.norm(query_vec)
+        if q_norm == 0:
+            return [0.0] * len(passage_embeddings)
+        query_vec = query_vec / q_norm
+        p_norms = np.linalg.norm(passage_vecs, axis=1, keepdims=True)
+        # Avoid divide-by-zero for degenerate embeddings
+        p_norms[p_norms == 0] = 1.0
+        passage_vecs = passage_vecs / p_norms
+
         # Compute cosine similarity
         similarities = np.dot(passage_vecs, query_vec)
-        
+
         return similarities.tolist()
     
     async def rank_documents(self, query: str, docs: List[FetchedDoc], 
