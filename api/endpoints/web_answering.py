@@ -258,53 +258,42 @@ async def web_search_answer(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="No evidence-based answer could be produced within constraints."
         )
-        
-        # Create citations list, including only those actually used in the answer
-        citations = []
-        for evidence in ranked_evidence:
-            if evidence.id in synthesis_result.used_citation_ids:
-                citations.append(Citation(
-                    id=evidence.id,
-                    url=evidence.url,
-                    title=evidence.title,
-                    site_name=evidence.site_name,
-                    published_at=evidence.published_at,
-                    snippet=evidence.passage[:200] + "..." if len(evidence.passage) > 200 else evidence.passage,
-                    score=evidence.score
-                ))
-        
-        # Sort citations by ID for consistency
-        citations.sort(key=lambda c: c.id)
-        
-        # Build response
-        response = WebSearchAnswerResponse(
-            query=request.query,
-            answer_markdown=synthesis_result.answer_markdown,
-            citations=citations,
-            used_sources_count=len(citations),
-            timings_ms=Timings(**timings),
-            meta=Meta(
-                engine=settings.web_search_engine,
-                region=request.region,
-                language=request.language,
-                style_profile_id=request.style_profile_id
-            )
+
+    # Create citations list, including only those actually used in the answer
+    citations = []
+    for evidence in ranked_evidence:
+        if evidence.id in synthesis_result.used_citation_ids:
+            citations.append(Citation(
+                id=evidence.id,
+                url=evidence.url,
+                title=evidence.title,
+                site_name=evidence.site_name,
+                published_at=evidence.published_at,
+                snippet=evidence.passage[:200] + "..." if len(evidence.passage) > 200 else evidence.passage,
+                score=evidence.score
+            ))
+
+    # Sort citations by ID for consistency
+    citations.sort(key=lambda c: c.id)
+
+    # Build response
+    response = WebSearchAnswerResponse(
+        query=request.query,
+        answer_markdown=synthesis_result.answer_markdown,
+        citations=citations,
+        used_sources_count=len(citations),
+        timings_ms=Timings(**timings),
+        meta=Meta(
+            engine=settings.web_search_engine,
+            region=request.region,
+            language=request.language,
+            style_profile_id=request.style_profile_id
         )
-        
-        logger.info(
-            f"Answer generated successfully in {timings['total']}ms with {len(citations)} citations",
-            extra=logger_ctx
-        )
-        
-        return response
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        # Log error and return 500
-        logger.exception(f"Error processing web search answer", extra=logger_ctx)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
-        )
+    )
+
+    logger.info(
+        f"Answer generated successfully in {timings['total']}ms with {len(citations)} citations",
+        extra=logger_ctx
+    )
+
+    return response
