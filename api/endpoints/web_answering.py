@@ -114,10 +114,10 @@ async def web_search_answer(
     req: Request,
     api_key: str = Depends(verify_internal_api_key)
 ):
-    start_time = time.time()
     """
     Perform web search and generate an answer with citations.
     """
+    start_time = time.time()
     # Generate request ID
     request_id = req.headers.get("X-Request-Id", str(uuid.uuid4()))
     logger_ctx = {"request_id": request_id}
