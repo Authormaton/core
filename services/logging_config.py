@@ -72,16 +72,24 @@ def setup_logging(level: int = logging.INFO, *, force: bool = False) -> None:
     root_logger = logging.getLogger()
     root_logger.setLevel(level)
 
-    # Avoid adding duplicate stream handlers unless forced
-    has_stream = any(isinstance(h, logging.StreamHandler) for h in root_logger.handlers)
-    if has_stream and not force:
+    # Detect existing StreamHandler(s) that write to stdout specifically.
+    stdout_handlers = [h for h in root_logger.handlers
+                       if isinstance(h, logging.StreamHandler) and getattr(h, 'stream', None) is sys.stdout]
+
+    # If a stdout handler already exists and we're not forcing an update, do nothing.
+    if stdout_handlers and not force:
         return
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JsonFormatter())
+    # If forcing, remove existing StreamHandler(s) (but leave file/syslog handlers intact).
     if force:
-        root_logger.handlers = [handler]
-    else:
+        root_logger.handlers = [h for h in root_logger.handlers if not isinstance(h, logging.StreamHandler)]
+
+    # Only add the stdout JSON handler if one isn't already present (avoid duplicates).
+    stdout_already = any(isinstance(h, logging.StreamHandler) and getattr(h, 'stream', None) is sys.stdout
+                         for h in root_logger.handlers)
+    if not stdout_already:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(JsonFormatter())
         root_logger.addHandler(handler)
 
 
