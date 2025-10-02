@@ -20,6 +20,10 @@ _SENTENCE_SPLIT_RE = re.compile(r'(?<=[.!?])\s+')
 
 
 def _estimate_tokens_from_text(text: str) -> int:
+    """
+    Estimate the number of tokens in the given text.
+    Uses tiktoken if available, otherwise falls back to a naive estimator.
+    """
     if tiktoken is not None:
         try:
             enc = tiktoken.get_encoding('gpt2')
@@ -31,6 +35,10 @@ def _estimate_tokens_from_text(text: str) -> int:
 
 
 def _join_sentences(sentences: List[str], max_chars: int) -> List[str]:
+    """
+    Join sentences into chunks, each not exceeding max_chars in length.
+    If a sentence is longer than max_chars, split it by character window.
+    """
     chunks = []
     cur = []
     cur_len = 0
@@ -57,6 +65,9 @@ def _join_sentences(sentences: List[str], max_chars: int) -> List[str]:
 
 
 def _make_chunk_meta(text: str, offset: int, order: int) -> Dict[str, Any]:
+    """
+    Create metadata dictionary for a chunk of text.
+    """
     return {
         'id': uuid.uuid4().hex,
         'order': order,
