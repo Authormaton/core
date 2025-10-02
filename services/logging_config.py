@@ -1,16 +1,4 @@
-"""
-Improved structured logging setup for Authormaton core engine.
 
-Features:
-- JSON formatter with ISO-8601 UTC times and exception support
-- Environment-configurable default level and optional "pretty" (indented) output
-- Includes process id and hostname automatically
-- Context-aware extras via contextvars (set_log_context/get_log_context/clear_log_context)
-- Helper to add a RotatingFileHandler
-- `get_logger()` convenience returning a RequestLoggerAdapter preloaded with context
-
-Call `setup_logging()` at application startup.
-"""
 
 import logging
 import json
@@ -39,7 +27,7 @@ class JsonFormatter(logging.Formatter):
         dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
         return dt.isoformat(timespec="milliseconds")
 
-    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+    def format(self, record: logging.LogRecord) -> str:
         base: Dict[str, Any] = {
             "time": self.formatTime(record, self.datefmt),
             "level": record.levelname,
@@ -48,26 +36,22 @@ class JsonFormatter(logging.Formatter):
             "pid": self.pid,
             "host": self.hostname,
         }
-
         if record.exc_info:
-            # Include textual exception info for debugging
             base["exc_text"] = self.formatException(record.exc_info)
-
-        # Merge contextvar extras (per-request) first
-        base.update(_log_context.get({}))
-
-        # Merge any extras passed to logging calls
+        base.update(_log_context.get())
+        excluded = {
+            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+            "module", "exc_info", "stack_info", "lineno", "funcName", "created",
+            "msecs", "relativeCreated", "thread", "threadName", "processName", "process"
+        }
         for k, v in record.__dict__.items():
-            if k in ("name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-                     "module", "exc_info", "stack_info", "lineno", "funcName", "created",
-                     "msecs", "relativeCreated", "thread", "threadName", "processName", "process"):
+            if k in excluded:
                 continue
             try:
                 json.dumps({k: v})
                 base[k] = v
             except Exception:
                 base[k] = str(v)
-
         if self.pretty:
             return json.dumps(base, ensure_ascii=False, indent=2)
         return json.dumps(base, ensure_ascii=False, separators=(",", ":"))
@@ -144,24 +128,20 @@ class RequestLoggerAdapter(logging.LoggerAdapter):
     """
 
     def process(self, msg: str, kwargs: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-        extra = kwargs.setdefault("extra", {})
-        # merge adapter extras without overwriting
-        for k, v in (self.extra or {}).items():
-            extra.setdefault(k, v)
-        # merge contextvar extras
-        for k, v in _log_context.get({}).items():
-            extra.setdefault(k, v)
+        extra: Dict[str, Any] = kwargs.setdefault("extra", {})
+        extra.update({k: v for k, v in self.extra.items() if k not in extra})
+        extra.update({k: v for k, v in _log_context.get().items() if k not in extra})
         return msg, kwargs
 
 
 def set_log_context(**kwargs: Any) -> None:
-    ctx = dict(_log_context.get({}))
+    ctx = dict(_log_context.get())
     ctx.update(kwargs)
     _log_context.set(ctx)
 
 
 def get_log_context() -> Dict[str, Any]:
-    return dict(_log_context.get({}))
+    return dict(_log_context.get())
 
 
 def clear_log_context() -> None:
@@ -174,6 +154,5 @@ def get_logger(name: Optional[str] = None, **adapter_extra: Any) -> RequestLogge
     return RequestLoggerAdapter(logger, adapter_extra)
 
 
-# Backwards compatibility: simple setup call
 if __name__ == "__main__":
     setup_logging()
