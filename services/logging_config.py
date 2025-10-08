@@ -128,9 +128,11 @@ class RequestLoggerAdapter(logging.LoggerAdapter):
     """
 
     def process(self, msg: str, kwargs: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-        extra: Dict[str, Any] = kwargs.setdefault("extra", {})
-        extra.update({k: v for k, v in self.extra.items() if k not in extra})
-        extra.update({k: v for k, v in _log_context.get().items() if k not in extra})
+        # Create a fresh dict for 'extra' to avoid mutating caller-supplied kwargs
+        new_extra = dict(kwargs.get("extra", {}))
+        new_extra.update({k: v for k, v in self.extra.items() if k not in new_extra})
+        new_extra.update({k: v for k, v in _log_context.get().items() if k not in new_extra})
+        kwargs["extra"] = new_extra
         return msg, kwargs
 
 
