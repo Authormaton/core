@@ -12,7 +12,7 @@ import re
 import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Set
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 
 import httpx
 from config.settings import settings
@@ -42,8 +42,7 @@ class WebFetchService:
     Service for fetching and extracting content from web pages.
     Uses asyncio for concurrent fetching with rate limiting via semaphore.
     """
-    
-    def __init__(self, max_concurrency: Optional[int] = None):
+    MAX_REDIRECTS = 5  # Maximum number of redirects to follow
         """
         Initialize the web fetch service.
         
@@ -53,6 +52,7 @@ class WebFetchService:
         """
         self.max_concurrency = max_concurrency or settings.max_fetch_concurrency
         self.semaphore = asyncio.Semaphore(self.max_concurrency)
+        self._client: Optional[httpx.AsyncClient] = None
         
         # Common HTML headers for the fetch requests
         self.headers = {
@@ -61,6 +61,20 @@ class WebFetchService:
             "Accept-Language": "en-US,en;q=0.5"
             # Let httpx handle Accept-Encoding and compression automatically
         }
+        
+        # Initialize httpx.AsyncClient with security and performance settings
+        self._client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=self.max_concurrency, max_keepalive_connections=20),
+            trust_env=False,  # Do not inherit proxy environment variables
+            follow_redirects=False,  # Disable automatic redirects
+            headers=self.headers # Set default headers for the client
+        )
+
+    async def close(self):
+        """Close the httpx client session."""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
     
     def _extract_site_name(self, url: str) -> str:
         """Extract site name from URL."""
@@ -158,13 +172,14 @@ class WebFetchService:
         # Fallback: simple HTML tag removal
         return self._sanitize_html_fallback(html)
     
-    async def _fetch_url(self, url: str, timeout_seconds: int = 10) -> FetchedDoc:
+    async def _fetch_url(self, url: str, timeout_seconds: int = 10, redirect_count: int = 0) -> FetchedDoc:
         """
-        Fetch a single URL and extract its content.
+        Fetch a single URL and extract its content, handling redirects manually.
         
         Args:
             url: The URL to fetch
             timeout_seconds: Timeout in seconds
+            redirect_count: Current number of redirects followed
             
         Returns:
             FetchedDoc object with extracted content
@@ -180,35 +195,49 @@ class WebFetchService:
                 fetch_ms=0
             )
             
-            # SSRF guard
+            # SSRF guard for initial URL and redirects
             if not self._is_url_allowed(url):
                 fetched_doc.fetch_ms = int((time.time() - start_time) * 1000)
                 logger.warning("Blocked potentially unsafe URL: %s", url)
                 return fetched_doc
             
+            if redirect_count > self.MAX_REDIRECTS:
+                fetched_doc.fetch_ms = int((time.time() - start_time) * 1000)
+                logger.warning("Exceeded maximum redirect limit for URL: %s", url)
+                return fetched_doc
+            
             try:
-                async with httpx.AsyncClient(timeout=timeout_seconds, follow_redirects=True) as client:
-                    response = await client.get(url, headers=self.headers)
-                    response.raise_for_status()
-                    
-                    html = response.text
-                    
-                    # Extract title if not already provided
-                    title = self._extract_title(html)
-                    
-                    # Extract text content
-                    text = self._extract_text_from_html(html)
-                    
-                    # Update the fetched document
-                    fetched_doc.title = title
-                    fetched_doc.text = text
-                    
-                    # Calculate fetch time
-                    fetch_ms = int((time.time() - start_time) * 1000)
-                    fetched_doc.fetch_ms = fetch_ms
-                    
-                    logger.info(f"Fetched {url} in {fetch_ms}ms, extracted {len(text)} chars")
-                    return fetched_doc
+                response = await self._client.get(url, timeout=timeout_seconds)
+                response.raise_for_status()
+                
+                # Manual redirect handling
+                if 300 <= response.status_code < 400:
+                    location = response.headers.get("Location")
+                    if location:
+                        new_url = urljoin(url, location)
+                        logger.info(f"Following redirect from {url} to {new_url}")
+                        return await self._fetch_url(new_url, timeout_seconds, redirect_count + 1)
+                    else:
+                        logger.warning(f"Redirect status {response.status_code} but no Location header for {url}")
+                        
+                html = response.text
+                
+                # Extract title if not already provided
+                title = self._extract_title(html)
+                
+                # Extract text content
+                text = self._extract_text_from_html(html)
+                
+                # Update the fetched document
+                fetched_doc.title = title
+                fetched_doc.text = text
+                
+                # Calculate fetch time
+                fetch_ms = int((time.time() - start_time) * 1000)
+                fetched_doc.fetch_ms = fetch_ms
+                
+                logger.info(f"Fetched {url} in {fetch_ms}ms, extracted {len(text)} chars")
+                return fetched_doc
                     
             except httpx.HTTPStatusError as e:
                 status = e.response.status_code

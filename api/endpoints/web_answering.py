@@ -22,6 +22,7 @@ from services.web_fetch_service import WebFetchService
 from services.ranking_service import RankingService
 from services.synthesis_service import SynthesisService
 from pydantic import field_validator
+from api.main import web_fetch_service # Import the global instance
 
 # Initialize logging using the project's logging helper (safe no-op if already configured)
 from services.logging_config import setup_logging, get_logger, set_log_context, clear_log_context, add_rotating_file_handler
@@ -155,7 +156,9 @@ async def web_search_answer(
         # Initialize services
         try:
             search_service = WebSearchService()
-            fetch_service = WebFetchService()
+            # Use the globally managed web_fetch_service
+            if web_fetch_service is None:
+                raise RuntimeError("WebFetchService not initialized.")
             ranking_service = RankingService()
             synthesis_service = SynthesisService()
         except Exception as e:
@@ -197,7 +200,7 @@ async def web_search_answer(
         fetch_start = time.time()
         try:
             fetched_docs = await asyncio.wait_for(
-                fetch_service.fetch_search_results(
+                web_fetch_service.fetch_search_results(
                     search_results=search_results,
                     timeout_seconds=min(request.timeout_seconds * 0.3, 8),  # Allocate 30% of timeout
                     preserve_snippets=request.include_snippets,
