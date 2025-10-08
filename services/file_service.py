@@ -36,7 +36,7 @@ def _get_thread_pool() -> ThreadPoolExecutor:
         _THREAD_POOL = ThreadPoolExecutor(max_workers=4)
     return _THREAD_POOL
 
-def save_upload_file(upload_file: IO, filename: str) -> str:
+def save_upload_file(upload_file: IO, filename: str, max_bytes: Optional[int] = None) -> str:
     # Sanitize filename: remove path, reject empty/unsafe
     logger = logging.getLogger(__name__)
     base = os.path.basename(filename)
@@ -55,27 +55,10 @@ def save_upload_file(upload_file: IO, filename: str) -> str:
         logger.error("Unsafe file path detected: %s", final_path)
         raise DocumentSaveError("Unsafe file path.")
 
-    # Default max bytes
-    max_bytes = DEFAULT_MAX_UPLOAD_BYTES
-
-    # Write file atomically in chunks while enforcing size limits and computing checksum
-    sha256 = hashlib.sha256()
-    total = 0
-
-    try:
-        with tempfile.NamedTemporaryFile(dir=UPLOAD_DIR, delete=False) as tmp:
-            temp_path = tmp.name
-            # Support starlette UploadFile which provides .file
-            source = getattr(upload_file, 'file', upload_file)
-            for chunk in iter(lambda: source.read(8192), b""):
-                if not chunk:
-                    break
-                tmp.write(chunk)
-                total += len(chunk)
-                sha256.update(chunk)
-                if total > max_bytes:
-                    logger.warning("Upload exceeds max allowed size: %d bytes", total)
-                    raise DocumentSaveError("Uploaded file exceeds maximum allowed size.")
+    # Use provided max_bytes or default
+                if total > effective_max_bytes:
+                    logger.warning("Upload of file %s exceeds max allowed size: %d bytes (max %d)", filename, total, effective_max_bytes)
+                    raise DocumentSaveError(f"Uploaded file '{filename}' exceeds maximum allowed size of {effective_max_bytes} bytes.")
         os.replace(temp_path, final_path)
         try:
             os.chmod(final_path, 0o600)
@@ -140,8 +123,8 @@ def save_upload_file_with_meta(upload_file: IO, filename: str, max_bytes: Option
                 total += len(chunk)
                 sha256.update(chunk)
                 if total > max_bytes:
-                    logger.warning("Upload exceeds max allowed size: %d bytes", total)
-                    raise DocumentSaveError("Uploaded file exceeds maximum allowed size.")
+                    logger.warning("Upload of file %s exceeds max allowed size: %d bytes (max %d)", filename, total, max_bytes)
+                    raise DocumentSaveError(f"Uploaded file '{filename}' exceeds maximum allowed size of {max_bytes} bytes.")
         os.replace(temp_path, final_path)
         try:
             os.chmod(final_path, 0o600)
@@ -179,7 +162,7 @@ def save_upload_file_with_meta(upload_file: IO, filename: str, max_bytes: Option
 async def save_upload_file_async(upload_file: IO, filename: str, max_bytes: Optional[int] = None) -> str:
     """Async wrapper that offloads the blocking save call to a thread pool."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_get_thread_pool(), save_upload_file, upload_file, filename)
+    return await loop.run_in_executor(_get_thread_pool(), save_upload_file, upload_file, filename, max_bytes)
 
 
 async def save_upload_file_with_meta_async(upload_file: IO, filename: str, max_bytes: Optional[int] = None) -> Dict[str, Any]:
