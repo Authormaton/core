@@ -1,3 +1,18 @@
+def test_upload_txt_too_large(tmp_path):
+    client = TestClient(app)
+    # Create a temporary text file larger than MAX_UPLOAD_BYTES
+    # MAX_UPLOAD_BYTES is 25 * 1024 * 1024 by default, so create a 26MB file
+    large_content = "A" * (26 * 1024 * 1024)
+    large_txt_file = tmp_path / "large_test.txt"
+    large_txt_file.write_text(large_content, encoding="utf-8")
+    with large_txt_file.open("rb") as f:
+        response = client.post(
+            "/upload/upload",
+            files={"file": ("large_test.txt", f, "text/plain")}
+        )
+    assert response.status_code == 400  # Expecting 400 due to DocumentSaveError
+    assert "exceeds maximum allowed size" in response.json()["detail"]
+
 def test_upload_pdf(tmp_path):
     client = TestClient(app)
     # Create a minimal PDF file (one page, one line of text)

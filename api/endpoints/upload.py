@@ -64,16 +64,7 @@ async def upload_document(request: Request, file: UploadFile = File(...)):  # no
         # Offload blocking save to threadpool
         loop = __import__("asyncio").get_running_loop()
         with ThreadPoolExecutor(max_workers=1) as ex:
-            saved_path = await loop.run_in_executor(ex, save_upload_file, file.file, filename)
-
-        # Quick size check after save
-        try:
-            size = os.path.getsize(saved_path)
-            if size > MAX_UPLOAD_BYTES:
-                logger.warning("Saved file exceeds max size", extra={"size": size, "path": saved_path})
-                raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
-        except OSError:
-            logger.exception("Failed to stat saved file", extra={"path": saved_path})
+            saved_path = await loop.run_in_executor(ex, save_upload_file, file.file, filename, MAX_UPLOAD_BYTES)
 
         parsing_status = "success"
         text_preview: Optional[str] = None
