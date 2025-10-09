@@ -9,6 +9,7 @@ import uuid
 import tempfile
 import contextlib
 import logging
+from pathlib import Path
 import hashlib
 import asyncio
 import mimetypes
@@ -211,17 +212,41 @@ def list_uploads() -> List[Dict[str, Any]]:
 
 
 def delete_upload(name_or_path: str) -> bool:
-    """Delete an upload by filename or absolute path. Returns True if deleted."""
-    if os.path.isabs(name_or_path):
-        path = name_or_path
-    else:
-        path = os.path.join(UPLOAD_DIR, name_or_path)
+    """Delete an upload by filename or absolute path, ensuring it's within UPLOAD_DIR."""
+    logger = logging.getLogger(__name__)
+
     try:
-        if os.path.exists(path):
-            os.remove(path)
-            return True
+        # Resolve UPLOAD_DIR and the target path
+        upload_dir_resolved = Path(UPLOAD_DIR).resolve()
+        
+        # If name_or_path is absolute, ensure it's within UPLOAD_DIR
+        if os.path.isabs(name_or_path):
+            target_path = Path(name_or_path)
+        else:
+            # Construct path relative to UPLOAD_DIR
+            target_path = Path(UPLOAD_DIR) / name_or_path
+
+        target_resolved = target_path.resolve()
+
+        # 1. Ensure the resolved target starts with the resolved UPLOAD_DIR path
+        if not target_resolved.is_relative_to(upload_dir_resolved):
+            logger.warning("Attempt to delete file outside UPLOAD_DIR: %s", name_or_path)
+            return False
+
+        # 2. Verify the target is a regular file and not a directory or symlink pointing outside
+        if not target_resolved.is_file():
+            logger.warning("Attempt to delete non-file or invalid file type: %s", name_or_path)
+            return False
+
+        # If all checks pass, remove the file
+        os.remove(target_resolved)
+        logger.info("Successfully deleted upload: %s", name_or_path)
+        return True
+    except FileNotFoundError:
+        logger.info("Attempted to delete non-existent file: %s", name_or_path)
+        return False
     except Exception:
-        logging.getLogger(__name__).exception("Failed to delete upload: %s", path)
+        logger.exception("Failed to delete upload: %s", name_or_path)
     return False
 
 
