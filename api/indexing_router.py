@@ -7,6 +7,8 @@ from config.settings import settings
 from services.vector_db_service import VectorDBClient as VectorDBService
 from services.embedding_service import embed_texts_batched
 from services.chunking_service import chunk_text
+from services.exceptions import DocumentChunkError
+import logging
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
@@ -22,7 +24,16 @@ class IndexResponse(BaseModel):
 
 @router.post("/index", response_model=IndexResponse, status_code=201)
 def index(request: IndexRequest, req: Request):
-    vdb = VectorDBService()
+    vdb = VectorDBService(dimension=settings.embedding_dimension, index_name=request.project_id)
+    try:
+        vdb.create_index()
+    except ValueError as e:
+        logging.error(f"VectorDB index error for project {request.project_id}: {e}")
+        raise HTTPException(status_code=422, detail=f"VECTOR_INDEX_ERROR: {e}")
+    except Exception as e:
+        logging.error(f"Unexpected error during VectorDB index creation for project {request.project_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"VECTOR_INDEX_CREATION_FAILED: {e}")
+
     indexed_chunks = 0
     sources_indexed = 0
     skipped_sources = 0
@@ -31,7 +42,7 @@ def index(request: IndexRequest, req: Request):
         source_id = src.get("source_id") or src.get("file_id") or "unknown"
         file_path = src.get("file_path", "")
         # Upload size check
-        if "text" in src and len(src["text"]) > settings.max_upload_mb * 1024 * 1024:
+        if "text" in src and len(src["text"].encode("utf-8")) > settings.max_upload_mb * 1024 * 1024:
             raise HTTPException(status_code=413, detail="UPLOAD_TOO_LARGE")
         if "file_id" in src:
             # TODO: Load file by file_id, check MIME/type, enforce size
@@ -45,8 +56,10 @@ def index(request: IndexRequest, req: Request):
         # Chunk text
         try:
             chunks = chunk_text(text)
-        except Exception:
-            raise HTTPException(status_code=415, detail="UNSUPPORTED_FILE_TYPE")
+            if not chunks:
+                raise HTTPException(status_code=422, detail="UNPROCESSABLE_ENTITY: No chunks generated from the provided text.")
+        except DocumentChunkError as e:
+            raise HTTPException(status_code=422, detail=f"UNPROCESSABLE_ENTITY: {e}")
         ids = [f"{source_id}:{i}" for i in range(len(chunks))]
         metadata = [{
             "project_id": request.project_id,

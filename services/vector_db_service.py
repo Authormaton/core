@@ -21,18 +21,36 @@ class VectorDBClient:
         self.index = None
         self.dimension = dimension or settings.embedding_dimension
 
+    def _get_index_description(self, index_name: str):
+        """Helper to get index description, returns None if not found."""
+        try:
+            return self.pc.describe_index(index_name)
+        except Exception: # Pinecone client raises if index not found
+            return None
+
     def create_index(self, index_name: str = None, dimension: int = None):
         from pinecone import ServerlessSpec
         idx_name = index_name or self.index_name
         dim = dimension or self.dimension
-        existing = [idx.name for idx in self.pc.list_indexes()]
-        if idx_name not in existing:
+        
+        index_desc = self._get_index_description(idx_name)
+
+        if index_desc is None:
+            # Index does not exist, create it
             self.pc.create_index(
                 name=idx_name,
                 dimension=dim,
                 spec=ServerlessSpec(cloud=self.cloud, region=self.region),
             )
-        self.index = self.pc.Index(idx_name)
+            self.index = self.pc.Index(idx_name)
+        else:
+            # Index exists, check dimension
+            if index_desc.dimension != dim:
+                raise ValueError(
+                    f"Index '{idx_name}' already exists with dimension {index_desc.dimension}, "
+                    f"but expected {dim}. Dimension mismatch."
+                )
+            self.index = self.pc.Index(idx_name)
 
     def upsert_vectors(self, vectors: List[List[float]], ids: List[str]):
         # Input validation
