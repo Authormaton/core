@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import os
 from services.logging_config import setup_logging
 from api.indexing_router import router as indexing_router
+from services.web_fetch_service import WebFetchService
 
 # Parse CORS_ALLOW_ORIGINS from env (comma-separated)
 def get_cors_origins():
@@ -15,10 +17,21 @@ def get_cors_origins():
 ALLOWED_ORIGINS = get_cors_origins()
 ALLOW_CREDENTIALS = False if ALLOWED_ORIGINS == ["*"] else True
 
+# Global service instances
+web_fetch_service: Optional[WebFetchService] = None
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    global web_fetch_service
+    web_fetch_service = WebFetchService()
+    yield
+    # Shutdown logic
+    if web_fetch_service:
+        await web_fetch_service.close()
 
 setup_logging()
-app = FastAPI(title="Authormaton Core AI Engine", version="1.0")
+app = FastAPI(title="Authormaton Core AI Engine", version="1.0", lifespan=lifespan)
 
 # Middleware to capture X-Request-Id and inject into logs
 @app.middleware("http")
