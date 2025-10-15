@@ -58,7 +58,7 @@ class SourceMaterialRequest(BaseModel):
     file_type: Optional[str] = Field(None, description="pdf|docx|text")
 
     @validator("file_type")
-    def validate_file_type(cls, v):
+    def validate_file_type(cls, v: Optional[str]) -> Optional[str]:
         if v is None:
             return v
         if v not in {"pdf", "docx", "text"}:
@@ -66,7 +66,7 @@ class SourceMaterialRequest(BaseModel):
         return v
 
     @validator("source_material")
-    def base64_or_text_size(cls, v, values):
+    def base64_or_text_size(cls, v: str, values: Dict[str, Any]) -> str:
         # If file_type is text or None, allow plain text up to a configured size
         file_type = values.get("file_type")
         max_bytes = int(os.getenv("INTERNAL_MAX_BYTES", str(5 * 1024 * 1024)))
@@ -87,7 +87,7 @@ class SourceMaterialRequest(BaseModel):
         return v
 
 # Dependency for internal authentication
-def verify_internal_api_key(api_key: str = Depends(api_key_header)):
+def verify_internal_api_key(api_key: str = Depends(api_key_header)) -> None:
     # Do not log or expose the secret
     if not api_key or not INTERNAL_API_KEY or not secrets.compare_digest(api_key, INTERNAL_API_KEY):
         raise HTTPException(
@@ -183,7 +183,7 @@ def process_material(
     request: SourceMaterialRequest,
     background_tasks: BackgroundTasks,
     _: str = Depends(verify_internal_api_key),
-):
+) -> Dict[str, str]:
     """Validate input and schedule background processing; return job id."""
     logger = logging.getLogger(__name__)
     try:
@@ -205,7 +205,7 @@ def process_material(
 
 
 @router.get("/job/{job_id}")
-def job_status(job_id: str, _: str = Depends(verify_internal_api_key)):
+def job_status(job_id: str, _: str = Depends(verify_internal_api_key)) -> Dict[str, Any]:
     with _jobs_lock:
         if job_id not in _jobs:
             raise HTTPException(status_code=404, detail="Job not found")

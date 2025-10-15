@@ -12,6 +12,7 @@ from config.settings import settings
 from services.logging_config import get_logger
 
 logger = get_logger(__name__)
+from services.exceptions import DocumentEmbeddingError
 
 def get_openai_api_key() -> str:
     api_key = os.getenv("OPENAI_API_KEY")
@@ -59,6 +60,7 @@ def embed_texts_batched(texts: List[str]) -> List[List[float]]:
                 if any(len(vec) != expected_dim for vec in vectors):
                     logger.error("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension for batch starting at index %d", i)
                     raise ValueError("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension")
+                    raise DocumentEmbeddingError("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension")
                 all_vectors.extend(vectors)
                 break
             except Exception as e:
@@ -68,4 +70,5 @@ def embed_texts_batched(texts: List[str]) -> List[List[float]]:
                 else:
                     logger.exception("Failed to embed batch after multiple retries.")
                     raise
+                    raise DocumentEmbeddingError(f"Failed to generate embeddings after multiple retries: {e}") from e
     return all_vectors
