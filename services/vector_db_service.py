@@ -18,9 +18,12 @@ class VectorDBClient:
         """
         from pinecone import Pinecone
         self.pc = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
-        logger.info("Pinecone client initialized for cloud: %s, region: %s", self.cloud, self.region)
+        from pinecone import Pinecone
+        self.pc = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
         self.cloud = settings.pinecone_cloud
         self.region = settings.pinecone_region
+        logger.info("Pinecone client initialized for cloud: %s, region: %s", self.cloud, self.region)
+        self.index_name = index_name or settings.pinecone_index_name
         self.index_name = index_name or settings.pinecone_index_name
         self.index = None
         self.dimension = dimension or settings.embedding_dimension
