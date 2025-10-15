@@ -9,6 +9,7 @@ from openai import OpenAI, APIConnectionError, APIError, AuthenticationError, Ra
 import time
 import random
 from config.settings import settings
+from services.exceptions import DocumentEmbeddingError
 
 def get_openai_api_key() -> str:
     api_key = os.getenv("OPENAI_API_KEY")
@@ -52,12 +53,12 @@ def embed_texts_batched(texts: List[str]) -> List[List[float]]:
             try:
                 vectors = embed_texts(batch, model=model)
                 if any(len(vec) != expected_dim for vec in vectors):
-                    raise ValueError("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension")
+                    raise DocumentEmbeddingError("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension")
                 all_vectors.extend(vectors)
                 break
             except Exception as e:
                 if attempt < 3:
                     time.sleep(2 ** attempt)
                 else:
-                    raise
+                    raise DocumentEmbeddingError(f"Failed to generate embeddings after multiple retries: {e}") from e
     return all_vectors
