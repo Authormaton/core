@@ -5,7 +5,7 @@ Uses embedding-based similarity scoring.
 
 from __future__ import annotations
 
-import logging
+from services.logging_config import get_logger
 import numpy as np
 import time
 from dataclasses import dataclass
@@ -15,7 +15,7 @@ from services.chunking_service import chunk_text
 from services.embedding_service import embed_texts
 from services.web_fetch_service import FetchedDoc
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @dataclass
 class RankedEvidence:

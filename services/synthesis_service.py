@@ -5,7 +5,7 @@ Generates Markdown answers with citations and references.
 
 from __future__ import annotations
 
-import logging
+from services.logging_config import get_logger
 import os
 import re
 import time
@@ -16,7 +16,7 @@ from openai import OpenAI
 from services.ranking_service import RankedEvidence
 from openai import AsyncOpenAI
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 @dataclass
 class SynthesisResult:

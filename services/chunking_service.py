@@ -3,7 +3,7 @@
 Service for splitting text into chunks for embedding and retrieval.
 """
 
-import logging
+from services.logging_config import get_logger
 import uuid
 import re
 from typing import List, Dict, Any, Optional, Tuple
@@ -92,7 +92,7 @@ def chunk_text(text: str, max_length: int = 500, overlap: int = 50, by_sentence:
 
     Each chunk dict contains: id, order, offset, length, text, estimated_tokens
     """
-    logger = logging.getLogger(__name__)
+    logger = get_logger(__name__)
     try:
         if not text:
             return []

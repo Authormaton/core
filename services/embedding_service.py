@@ -9,10 +9,14 @@ from openai import OpenAI, APIConnectionError, APIError, AuthenticationError, Ra
 import time
 import random
 from config.settings import settings
+from services.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 def get_openai_api_key() -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
+        logger.error("OPENAI_API_KEY not set in environment.")
         raise ValueError("OPENAI_API_KEY not set in environment.")
     return api_key
 
@@ -30,15 +34,16 @@ def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout
             response = client.embeddings.create(input=texts, model=model)
             return [item.embedding for item in response.data]
         except AuthenticationError as e:
-            # Credentials are invalid or expired
+            logger.exception("Authentication error with OpenAI API.")
             raise
         except RateLimitError as e:
-            # Client will retry up to max_retries; bubble up if still failing
+            logger.warning("Rate limit hit with OpenAI API, retrying...")
             if attempt == max_retries:
+                logger.exception("Max retries reached for OpenAI API rate limit.")
                 raise
             time.sleep(2 ** attempt + random.random())
         except (APIConnectionError, APIError) as e:
-            # Network or other API errors
+            logger.exception("OpenAI API connection or general API error.")
             raise
 
 def embed_texts_batched(texts: List[str]) -> List[List[float]]:
@@ -52,12 +57,15 @@ def embed_texts_batched(texts: List[str]) -> List[List[float]]:
             try:
                 vectors = embed_texts(batch, model=model)
                 if any(len(vec) != expected_dim for vec in vectors):
+                    logger.error("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension for batch starting at index %d", i)
                     raise ValueError("EMBEDDING_DIMENSION_MISMATCH: One or more vectors have incorrect dimension")
                 all_vectors.extend(vectors)
                 break
             except Exception as e:
+                logger.warning("Error embedding batch, attempt %d/%d: %s", attempt + 1, 4, e)
                 if attempt < 3:
                     time.sleep(2 ** attempt)
                 else:
+                    logger.exception("Failed to embed batch after multiple retries.")
                     raise
     return all_vectors

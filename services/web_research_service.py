@@ -2,7 +2,9 @@
 WebResearchService: Gather information from the internet and verify sources.
 """
 
-import logging
+from services.logging_config import get_logger
+
+logger = get_logger(__name__)
 from typing import Iterable
 import requests
 from bs4 import BeautifulSoup
@@ -86,7 +88,7 @@ class WebResearchService:
             resp.raise_for_status()
             soup = BeautifulSoup(resp.text, "html.parser")
         except requests.RequestException as e:
-            logging.warning(f"Search request failed: {e}")
+            logger.warning(f"Search request failed: {e}")
             return [{"url": None, "title": None, "snippet": None, "verified": False, "error": str(e)}]
 
         for a in soup.select("a.result__a")[:num_results]:

@@ -8,7 +8,9 @@ import os
 import uuid
 import tempfile
 import contextlib
-import logging
+from services.logging_config import get_logger
+
+logger = get_logger(__name__)
 from pathlib import Path
 import hashlib
 import asyncio
@@ -39,7 +41,6 @@ def _get_thread_pool() -> ThreadPoolExecutor:
 
 def save_upload_file(upload_file: IO, filename: str, max_bytes: Optional[int] = None) -> str:
     # Sanitize filename: remove path, reject empty/unsafe
-    logger = logging.getLogger(__name__)
     base = os.path.basename(filename)
     if not base or base in {'.', '..'} or any(c in base for c in '\\/:*?"<>|'):
         logger.error("Invalid filename for upload: %s", filename)
@@ -92,7 +93,6 @@ def save_upload_file_with_meta(upload_file: IO, filename: str, max_bytes: Option
 
     This keeps the original save behavior but returns useful metadata for callers.
     """
-    logger = logging.getLogger(__name__)
     # If caller passes a custom max_bytes use it, otherwise use default
     if max_bytes is None:
         max_bytes = DEFAULT_MAX_UPLOAD_BYTES
@@ -213,7 +213,6 @@ def list_uploads() -> List[Dict[str, Any]]:
 
 def delete_upload(name_or_path: str) -> bool:
     """Delete an upload by filename or absolute path, ensuring it's within UPLOAD_DIR."""
-    logger = logging.getLogger(__name__)
 
     try:
         # Resolve UPLOAD_DIR and the target path
@@ -259,5 +258,5 @@ def cleanup_old_uploads(days: int = 7) -> int:
         if mtime < cutoff:
             if delete_upload(info['path']):
                 removed += 1
-    logging.getLogger(__name__).info("cleanup_old_uploads removed %d files older than %d days", removed, days)
+    logger.info("cleanup_old_uploads removed %d files older than %d days", removed, days)
     return removed
