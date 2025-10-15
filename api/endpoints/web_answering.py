@@ -61,7 +61,7 @@ class WebSearchAnswerRequest(BaseModel):
     # Validators
     @field_validator("top_k_results")
     @classmethod
-    def validate_top_k_results(cls, v):
+    def validate_top_k_results(cls, v: int) -> int:
         return max(3, min(15, v))  # Clamp between 3 and 15
 
     @field_validator("max_context_chars")

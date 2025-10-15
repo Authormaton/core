@@ -31,7 +31,7 @@ def _secure_filename(name: str) -> str:
 
 
 @router.post("/upload", response_model=UploadResponse)
-async def upload_document(request: Request, file: UploadFile = File(...)):  # noqa: B008
+async def upload_document(request: Request, file: UploadFile = File(...)) -> UploadResponse:  # noqa: B008
     """Upload and do a light parse to provide a preview.
 
     This endpoint is async but offloads blocking file IO to a threadpool.
