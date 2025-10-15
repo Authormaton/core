@@ -156,5 +156,5 @@ def get_logger(name: Optional[str] = None, **adapter_extra: Any) -> RequestLogge
     return RequestLoggerAdapter(logger, adapter_extra)
 
 
-if __name__ == "__main__":
-    setup_logging()
+# Call setup_logging when the module is imported to ensure logging is configured
+setup_logging()

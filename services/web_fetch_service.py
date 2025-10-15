@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import logging
+from services.logging_config import get_logger
 import re
 import time
 from dataclasses import dataclass
@@ -17,7 +17,7 @@ from urllib.parse import urlparse, urljoin
 import httpx
 from config.settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Import trafilatura if available, otherwise provide a fallback
 try:
