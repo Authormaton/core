@@ -40,6 +40,11 @@ def _get_thread_pool() -> ThreadPoolExecutor:
     return _THREAD_POOL
 
 def save_upload_file(upload_file: IO, filename: str, max_bytes: Optional[int] = None) -> str:
+    # Reject filenames containing path separators to prevent directory traversal
+    if '/' in filename or '\\' in filename:
+        logger.error("Filename contains path separators: %s", filename)
+        raise DocumentSaveError("Invalid filename.")
+
     # Sanitize filename: remove path, reject empty/unsafe
     base = os.path.basename(filename)
     if not base or base in {'.', '..'} or any(c in base for c in '\\/:*?"<>|'):
@@ -51,13 +56,24 @@ def save_upload_file(upload_file: IO, filename: str, max_bytes: Optional[int] = 
     safe_name = f"{uuid.uuid4().hex}{ext}"
     final_path = os.path.abspath(os.path.join(UPLOAD_DIR, safe_name))
 
-    # Ensure final path is within UPLOAD_DIR
-    upload_dir_abs = os.path.abspath(UPLOAD_DIR)
-    if not final_path.startswith(upload_dir_abs + os.sep):
-        logger.error("Unsafe file path detected: %s", final_path)
+    # Ensure final path is within UPLOAD_DIR using resolved paths
+    upload_dir_resolved = Path(UPLOAD_DIR).resolve()
+    final_path_resolved = Path(final_path).resolve()
+    if not final_path_resolved.is_relative_to(upload_dir_resolved):
+        logger.error("Unsafe file path detected: %s (resolved to %s)", filename, final_path_resolved)
         raise DocumentSaveError("Unsafe file path.")
 
-    # Use provided max_bytes or default
+    effective_max_bytes = max_bytes if max_bytes is not None else DEFAULT_MAX_UPLOAD_BYTES
+    total = 0
+    try:
+        with tempfile.NamedTemporaryFile(dir=UPLOAD_DIR, delete=False) as tmp:
+            temp_path = tmp.name
+            source = getattr(upload_file, 'file', upload_file)
+            for chunk in iter(lambda: source.read(8192), b""):
+                if not chunk:
+                    break
+                tmp.write(chunk)
+                total += len(chunk)
                 if total > effective_max_bytes:
                     logger.warning("Upload of file %s exceeds max allowed size: %d bytes (max %d)", filename, total, effective_max_bytes)
                     raise DocumentSaveError(f"Uploaded file '{filename}' exceeds maximum allowed size of {effective_max_bytes} bytes.")
@@ -93,12 +109,17 @@ def save_upload_file_with_meta(upload_file: IO, filename: str, max_bytes: Option
 
     This keeps the original save behavior but returns useful metadata for callers.
     """
+    # Reject filenames containing path separators to prevent directory traversal
+    if '/' in filename or '\\' in filename:
+        logger.error("Filename contains path separators: %s", filename)
+        raise DocumentSaveError("Invalid filename.")
+
     # If caller passes a custom max_bytes use it, otherwise use default
     if max_bytes is None:
         max_bytes = DEFAULT_MAX_UPLOAD_BYTES
 
     base = os.path.basename(filename)
-    if not base:
+    if not base or base in {'.', '..'}:
         raise DocumentSaveError("Invalid filename.")
 
     ext = os.path.splitext(base)[1]
@@ -106,8 +127,10 @@ def save_upload_file_with_meta(upload_file: IO, filename: str, max_bytes: Option
     final_path = os.path.abspath(os.path.join(UPLOAD_DIR, safe_name))
 
     upload_dir_abs = os.path.abspath(UPLOAD_DIR)
-    if not final_path.startswith(upload_dir_abs + os.sep):
-        logger.error("Unsafe file path detected: %s", final_path)
+    upload_dir_resolved = Path(UPLOAD_DIR).resolve()
+    final_path_resolved = Path(final_path).resolve()
+    if not final_path_resolved.is_relative_to(upload_dir_resolved):
+        logger.error("Unsafe file path detected: %s (resolved to %s)", final_path, final_path_resolved)
         raise DocumentSaveError("Unsafe file path.")
 
     sha256 = hashlib.sha256()
@@ -238,7 +261,7 @@ def delete_upload(name_or_path: str) -> bool:
             return False
 
         # If all checks pass, remove the file
-        os.remove(target_resolved)
+        os.remove(str(target_resolved))
         logger.info("Successfully deleted upload: %s", name_or_path)
         return True
     except FileNotFoundError:
