@@ -86,7 +86,7 @@ def index(request: IndexRequest, req: Request):
                 "file_path": file_path,
                 "page": 1,
                 "chunk_id": ids[i],
-                "char_span": [0, len(chunks[i])],
+                "char_span": [chunks[i]["offset"], chunks[i]["offset"] + chunks[i]["length"]],
             }
             for i in range(len(chunks))
         ]
