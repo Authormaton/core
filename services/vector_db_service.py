@@ -11,21 +11,22 @@ from services.logging_config import get_logger
 logger = get_logger(__name__)
 
 class VectorDBClient:
-    def __init__(self, dimension: int = None, index_name: str = None):
+    def __init__(self, dimension: int = None, index_name: str = None, pinecone_client=None, pinecone_index=None):
         """
         Initialize Pinecone client for serverless (cloud/region).
         Loads API key and config from settings.
         """
-        from pinecone import Pinecone
-        self.pc = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
-        from pinecone import Pinecone
-        self.pc = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
+        if pinecone_client:
+            self.pc = pinecone_client
+        else:
+            from pinecone import Pinecone
+            self.pc = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
+
         self.cloud = settings.pinecone_cloud
         self.region = settings.pinecone_region
         logger.info("Pinecone client initialized for cloud: %s, region: %s", self.cloud, self.region)
         self.index_name = index_name or settings.pinecone_index_name
-        self.index_name = index_name or settings.pinecone_index_name
-        self.index = None
+        self.index = pinecone_index
         self.dimension = dimension or settings.embedding_dimension
 
     def _get_index_description(self, index_name: str):
@@ -53,7 +54,8 @@ class VectorDBClient:
                 dimension=dim,
                 spec=ServerlessSpec(cloud=self.cloud, region=self.region),
             )
-            self.index = self.pc.Index(idx_name)
+            if self.index is None:
+                self.index = self.pc.Index(idx_name)
             logger.info("Pinecone index '%s' created successfully.", idx_name)
         else:
             # Index exists, check dimension
@@ -66,7 +68,8 @@ class VectorDBClient:
                     f"Index '{idx_name}' already exists with dimension {index_desc.dimension}, "
                     f"but expected {dim}. Dimension mismatch."
                 )
-            self.index = self.pc.Index(idx_name)
+            if self.index is None:
+                self.index = self.pc.Index(idx_name)
             logger.info("Connected to existing Pinecone index '%s'.", idx_name)
 
     def upsert_vectors(self, vectors: List[List[float]], ids: List[str]):
