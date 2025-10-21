@@ -9,7 +9,7 @@ import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field, validator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import base64
 import binascii
 import time
@@ -234,7 +234,7 @@ def batch_embed_texts(
         logger.exception("Error generating batch embeddings")
         if INTERNAL_REQUESTS:
             INTERNAL_REQUESTS.labels(status="batch_embed_error").inc()
-        raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {e}") from e
 
 
 @router.get("/job/{job_id}")
