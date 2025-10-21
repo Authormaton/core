@@ -25,8 +25,20 @@ import tempfile
 import logging
 from services.parsing_service import extract_text_from_pdf, extract_text_from_docx
 from services.chunking_service import chunk_text
-from services.embedding_service import embed_texts
+from services.embedding_service import embed_texts, embed_texts_batched
 # VectorDBClient intentionally not imported by default here; integrate in production
+
+
+class BatchEmbeddingRequest(BaseModel):
+    texts: List[str] = Field(..., description="List of texts to embed")
+
+    @validator("texts")
+    def check_text_lengths(cls, v: List[str]) -> List[str]:
+        max_text_length = int(os.getenv("INTERNAL_MAX_EMBED_TEXT_LENGTH", "2048"))
+        for text in v:
+            if len(text) > max_text_length:
+                raise ValueError(f"Individual text length exceeds maximum of {max_text_length} characters.")
+        return v
 
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")  # used by embedding service
@@ -202,6 +214,27 @@ def process_material(
         if INTERNAL_REQUESTS:
             INTERNAL_REQUESTS.labels(status="error").inc()
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/batch-embed", response_model=Dict[str, List[List[float]]])
+def batch_embed_texts(
+    request: BatchEmbeddingRequest,
+    _: str = Depends(verify_internal_api_key),
+) -> Dict[str, List[List[float]]]:
+    """
+    Generates embeddings for a list of texts.
+    """
+    logger = logging.getLogger(__name__)
+    try:
+        embeddings = embed_texts_batched(request.texts)
+        if INTERNAL_REQUESTS:
+            INTERNAL_REQUESTS.labels(status="batch_embed_success").inc()
+        return {"embeddings": embeddings}
+    except Exception as e:
+        logger.exception("Error generating batch embeddings")
+        if INTERNAL_REQUESTS:
+            INTERNAL_REQUESTS.labels(status="batch_embed_error").inc()
+        raise HTTPException(status_code=500, detail=f"Failed to generate embeddings: {e}")
 
 
 @router.get("/job/{job_id}")
