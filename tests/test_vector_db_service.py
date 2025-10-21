@@ -3,27 +3,44 @@
 import pytest
 from services.vector_db_service import VectorDBClient
 
+
 class DummyIndex:
     def __init__(self, dimension):
         self.dimension = dimension
         self.upserted = []
-    def upsert(self, vectors=None):
+    def upsert(self, vectors=None, namespace=None):
         if vectors:
             self.upserted.extend(vectors)
     def query(self, vector, top_k=5):
         return {'matches': [{'id': 'id1', 'score': 0.99}]}
 
+class MockPinecone:
+    def __init__(self, api_key):
+        self.api_key = api_key
+
+    def Index(self, name):
+        return DummyIndex(dimension=8) # Assuming dimension 8 for tests
+
+    def describe_index(self, index_name):
+        # Simulate index not found
+        return None
+
+    def create_index(self, name, dimension, spec):
+        pass
+
 @pytest.fixture
-def vdb(monkeypatch):
-    svc = VectorDBClient(dimension=8, index_name="test-index")
-    monkeypatch.setattr(svc, 'index', DummyIndex(svc.dimension))
+def vdb():
+    mock_pinecone_client = MockPinecone(api_key="test-api-key")
+    svc = VectorDBClient(dimension=8, index_name="test-index", pinecone_client=mock_pinecone_client, pinecone_index=mock_pinecone_client.Index("test-index"))
     return svc
 
-def test_create_index(monkeypatch):
-    svc = VectorDBClient(dimension=8, index_name="test-index")
-    monkeypatch.setattr(svc.pc, 'list_indexes', lambda: [])
-    monkeypatch.setattr(svc.pc, 'create_index', lambda **kwargs: None)
-    monkeypatch.setattr(svc.pc, 'Index', lambda name: DummyIndex(8))
+def test_create_index():
+    mock_pinecone_client = MockPinecone(api_key="test-api-key")
+    mock_pinecone_client.describe_index = lambda name: None # Simulate index not found
+    mock_pinecone_client.create_index = lambda name, dimension, spec: None # Mock create_index
+    mock_pinecone_client.Index = lambda name: DummyIndex(dimension=8) # Mock Index
+
+    svc = VectorDBClient(dimension=8, index_name="test-index", pinecone_client=mock_pinecone_client)
     svc.create_index()
     assert svc.index.dimension == 8
 

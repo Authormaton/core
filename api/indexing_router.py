@@ -4,7 +4,7 @@ Indexing router for /internal/index endpoint.
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from pydantic import BaseModel
 
 from config.settings import settings
@@ -28,11 +28,15 @@ class IndexResponse(BaseModel):
     skipped_sources: int
 
 
-@router.post("/index", response_model=IndexResponse, status_code=201)
-def index(request: IndexRequest, req: Request):
-    vdb = VectorDBService(
+def get_vector_db_service(request: IndexRequest) -> VectorDBService:
+    return VectorDBService(
         dimension=settings.embedding_dimension, index_name=request.project_id
     )
+
+
+@router.post("/index", response_model=IndexResponse, status_code=201)
+def index(request: IndexRequest, req: Request, vdb: VectorDBService = Depends(get_vector_db_service)):
+
     try:
         vdb.create_index()
     except ValueError as e:
