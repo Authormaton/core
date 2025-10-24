@@ -116,36 +116,83 @@ def chunk_text(text: str, max_length: int = 500, overlap: int = 50, by_sentence:
         initial_chunks: List[Tuple[int, int, str]] = [] # (chunk_start, chunk_end, text_content)
 
         if by_sentence:
-            sentences = _SENTENCE_SPLIT_RE.split(text)
-            joined_chunks_str = _join_sentences(sentences, max_length, overlap)
+            # New regex to match sentences including trailing punctuation and whitespace
+            _SENTENCE_MATCH_RE = re.compile(r'[^.!?]*[.!?]+(?=\s*|$)', re.DOTALL)
+            sentences_with_spans: List[Tuple[int, int, str]] = []
+            for m in _SENTENCE_MATCH_RE.finditer(text):
+                # Ensure we capture the full sentence including trailing whitespace if present
+                sentence_text = m.group(0)
+                sentences_with_spans.append((m.start(), m.end(), sentence_text))
 
-            current_global_char_offset = 0
-            for jc_str in joined_chunks_str:
-                # Find the actual start of the chunk in the original text.
-                # This is more robust than text.find as it tracks the global offset.
-                start_idx = current_global_char_offset
-                # Adjust start_idx to align with the actual content of jc_str within the remaining text
-                # This handles cases where _join_sentences might have added/removed spaces or
-                # if the first sentence of a chunk doesn't perfectly align with current_global_char_offset
-                # due to previous overlaps.
-                # We search for the jc_str in the text starting from current_global_char_offset
-                # to ensure we get the correct global start index.
-                found_idx = text.find(jc_str, current_global_char_offset)
-                if found_idx != -1:
-                    start_idx = found_idx
+            current_chunk_sentences: List[Tuple[int, int, str]] = []
+            current_chunk_char_length = 0
+            current_chunk_start_idx = 0
+
+            for i, (s_start, s_end, s_text) in enumerate(sentences_with_spans):
+                # If this is the first sentence in a potential chunk, set its start index
+                if not current_chunk_sentences:
+                    current_chunk_start_idx = s_start
+
+                # Check if adding the current sentence exceeds max_length
+                # We add 1 for a potential space if joining multiple sentences
+                potential_new_length = current_chunk_char_length + len(s_text) + (1 if current_chunk_sentences else 0)
+
+                if potential_new_length <= max_length:
+                    current_chunk_sentences.append((s_start, s_end, s_text))
+                    current_chunk_char_length = potential_new_length
                 else:
-                    # Fallback: if not found, assume it starts at current_global_char_offset
-                    # and log a warning. This should ideally not happen with _join_sentences.
-                    logger.warning(f"Could not find chunk string '{jc_str[:50]}...' at or after offset {current_global_char_offset}. Assuming start at offset.")
+                    # Finalize the current chunk
+                    if current_chunk_sentences:
+                        chunk_end_idx = current_chunk_sentences[-1][1]
+                        chunk_text_content = text[current_chunk_start_idx:chunk_end_idx]
+                        initial_chunks.append((current_chunk_start_idx, chunk_end_idx, chunk_text_content))
 
-                end_idx = start_idx + len(jc_str)
-                initial_chunks.append((start_idx, end_idx, jc_str))
+                    # Start a new chunk with the current sentence
+                    current_chunk_sentences = [(s_start, s_end, s_text)]
+                    current_chunk_char_length = len(s_text)
+                    current_chunk_start_idx = s_start
 
-                # Advance the global character offset for the next chunk.
-                # The next chunk's content will start after the non-overlapping part of the current chunk.
-                current_global_char_offset = end_idx - overlap
-                if current_global_char_offset < 0:
-                    current_global_char_offset = 0
+            # Add the last chunk if any sentences are remaining
+            if current_chunk_sentences:
+                chunk_end_idx = current_chunk_sentences[-1][1]
+                chunk_text_content = text[current_chunk_start_idx:chunk_end_idx]
+                initial_chunks.append((current_chunk_start_idx, chunk_end_idx, chunk_text_content))
+
+            # Apply overlap logic to the initial_chunks
+            # Overlap is applied by adjusting the start of subsequent chunks
+            # to be within the previous chunk's end, ensuring sentence boundaries are respected.
+            # This means the overlap is in terms of characters, but the chunk starts at a sentence boundary.
+            overlapped_chunks: List[Tuple[int, int, str]] = []
+            if initial_chunks:
+                overlapped_chunks.append(initial_chunks[0]) # First chunk is always added as is
+
+                for i in range(1, len(initial_chunks)):
+                    prev_chunk_start, prev_chunk_end, _ = initial_chunks[i-1]
+                    current_chunk_start, current_chunk_end, _ = initial_chunks[i]
+
+                    # Calculate the desired overlap start point
+                    desired_overlap_start = prev_chunk_end - overlap
+
+                    # Find the sentence that starts at or after desired_overlap_start
+                    # and is before or at the current_chunk_start
+                    new_chunk_start_idx = current_chunk_start # Default to current chunk start
+
+                    for s_start, s_end, s_text in sentences_with_spans:
+                        if s_start >= desired_overlap_start and s_start < current_chunk_start:
+                            new_chunk_start_idx = s_start
+                            break
+                        elif s_start >= current_chunk_start: # If we passed the current chunk start, stop
+                            break
+
+                    # Ensure the new chunk start is not greater than the current chunk's original start
+                    new_chunk_start_idx = min(new_chunk_start_idx, current_chunk_start)
+                    # Ensure the new chunk start is not less than 0
+                    new_chunk_start_idx = max(0, new_chunk_start_idx)
+
+                    # Reconstruct the chunk text based on the new start and original end
+                    chunk_text_content = text[new_chunk_start_idx:current_chunk_end]
+                    overlapped_chunks.append((new_chunk_start_idx, current_chunk_end, chunk_text_content))
+            initial_chunks = overlapped_chunks
 
         else:
             # naive fixed-window chunking
