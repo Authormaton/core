@@ -212,6 +212,12 @@ def chunk_text(text: str, max_length: int = 500, overlap: int = 50, by_sentence:
                 if est > token_target * 2:
                     # split by character windows approximating tokens
                     approx_chars = max(100, token_target * 4)
+                    # Ensure approx_chars is always greater than overlap to guarantee forward progress.
+                    # If not, adjust approx_chars to be just enough to make progress.
+                    if approx_chars <= overlap:
+                        approx_chars = overlap + 1
+                    # Calculate the step size, ensuring it's at least 1 to guarantee forward progress.
+                    step = max(1, approx_chars - overlap)
                     split_start = 0
                     while split_start < len(chunk_text_content):
                         split_end = min(split_start + approx_chars, len(chunk_text_content))
@@ -219,11 +225,7 @@ def chunk_text(text: str, max_length: int = 500, overlap: int = 50, by_sentence:
                         sub_chunk_global_start = original_start + split_start
                         sub_chunk_global_end = original_start + split_end
                         refined_chunks.append((sub_chunk_global_start, sub_chunk_global_end, sub_chunk_text))
-                        split_start += approx_chars - overlap # Apply overlap to sub-chunks as well
-                        if split_start < 0: # Ensure split_start doesn't go negative
-                            split_start = 0
-                        if split_end == len(chunk_text_content):
-                            break
+                        split_start += step # Always advance split_start by at least 1
                     continue
             refined_chunks.append((original_start, original_end, chunk_text_content))
 

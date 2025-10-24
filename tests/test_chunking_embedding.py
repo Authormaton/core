@@ -11,7 +11,7 @@ def test_chunk_text_basic():
     text = "abcdefghijklmnopqrstuvwxyz"
     max_length = 10
     overlap = 2
-    chunks = chunk_text(text, max_length=max_length, overlap=overlap)
+    chunks = chunk_text(text, max_length=max_length, overlap=overlap, by_sentence=False)
 
     assert len(chunks) > 1
     for i, chunk in enumerate(chunks):
@@ -33,11 +33,9 @@ def test_chunk_text_basic():
             current_chunk = chunks[i]
             next_chunk = chunks[i+1]
             # The end of the current chunk minus the overlap should be the start of the next chunk
-            # This accounts for the overlap being at the end of the previous chunk and start of the next
             expected_next_start = current_chunk["chunk_start"] + max_length - overlap
-            # Ensure the next chunk's start is within the expected range, considering potential sentence breaks
-            assert next_chunk["chunk_start"] >= expected_next_start - (max_length - overlap) # Allow for some flexibility due to sentence splitting
-            assert next_chunk["chunk_start"] < current_chunk["chunk_end"]
+            # For fixed-window chunking, the next chunk's start should be exactly as expected
+            assert next_chunk["chunk_start"] == expected_next_start
 
 
 def test_chunk_text_with_metadata_and_overlap():
@@ -130,7 +128,8 @@ def test_chunk_text_boundary_overlap_and_metadata():
         (25, 35, "zABCDEFGHI"),
         (30, 40, "FGHIJKLMNO"),
         (35, 45, "LMNOPQRSTU"),
-        (40, 50, "UVWXYZ")
+        (40, 50, "UVWXYZ"),
+        (45, 52, "TUVWXYZ")
     ]
 
     assert len(chunks1) == len(expected_chunks1)
@@ -274,3 +273,26 @@ def test_chunk_text_edge_cases():
         chunk_text("abc", max_length=5, overlap=5, by_sentence=True)
     with pytest.raises(ValueError, match="overlap must be less than max_length"):
         chunk_text("abc", max_length=5, overlap=6, by_sentence=False)
+
+    # New tests for token_target small values with large overlap
+    text_long = "A" * 200
+    # Case 1: overlap >= approx_chars, should still make progress
+    chunks_small_token_large_overlap = chunk_text(text_long, max_length=50, overlap=40, token_target=5, by_sentence=False)
+    assert len(chunks_small_token_large_overlap) > 1
+    assert chunks_small_token_large_overlap[0]["text"] == text_long[0:20]
+    assert chunks_small_token_large_overlap[1]["text"] == text_long[1:21]
+    assert chunks_small_token_large_overlap[-1]["chunk_end"] == len(text_long)
+
+    # Case 2: overlap = approx_chars - 1
+    chunks_overlap_minus_1 = chunk_text(text_long, max_length=50, overlap=19, token_target=5, by_sentence=False)
+    assert len(chunks_overlap_minus_1) > 1
+    assert chunks_overlap_minus_1[0]["text"] == text_long[0:20]
+    assert chunks_overlap_minus_1[1]["text"] == text_long[1:21]
+    assert chunks_overlap_minus_1[-1]["chunk_end"] == len(text_long)
+
+    # Case 3: overlap = approx_chars
+    chunks_overlap_equal = chunk_text(text_long, max_length=50, overlap=20, token_target=5, by_sentence=False)
+    assert len(chunks_overlap_equal) > 1
+    assert chunks_overlap_equal[0]["text"] == text_long[0:20]
+    assert chunks_overlap_equal[1]["text"] == text_long[1:21]
+    assert chunks_overlap_equal[-1]["chunk_end"] == len(text_long)
