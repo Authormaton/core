@@ -21,3 +21,7 @@ class DocumentChunkError(DocumentProcessingError):
 class DocumentEmbeddingError(DocumentProcessingError):
     """Raised when embedding generation fails."""
     pass
+
+class FileReadError(DocumentProcessingError):
+    """Raised when there's an error reading a file."""
+    pass

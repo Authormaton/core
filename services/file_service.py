@@ -17,8 +17,14 @@ import asyncio
 import mimetypes
 from datetime import datetime, timezone, timedelta
 from typing import IO, Optional, List, Dict, Any
-from services.exceptions import DocumentSaveError
+from services.exceptions import DocumentSaveError, FileReadError
 from concurrent.futures import ThreadPoolExecutor
+
+try:
+    import chardet
+except ImportError:
+    chardet = None
+    logger.warning("chardet not installed, file encoding detection will be limited.")
 
 DEFAULT_MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))  # 50 MiB
 _ENV_UPLOAD_DIR = os.environ.get("UPLOAD_DIR")
@@ -285,12 +291,15 @@ def cleanup_old_uploads(days: int = 7) -> int:
     return removed
 
 
-def read_file_content(file_path: str) -> Optional[str]:
+def read_file_content(file_path: str) -> str:
     """
     Reads the content of a file, attempting to detect encoding if necessary.
     Handles various path edge-cases and raises FileReadError for issues.
     """
-    normalized_path = Path(file_path).resolve()
+    try:
+        normalized_path = Path(file_path).resolve()
+    except Exception as e:
+        raise FileReadError(f"Invalid file path or resolution error for '{file_path}': {e}") from e
 
     if not normalized_path.exists():
         raise FileReadError(f"File not found: {file_path}")
@@ -300,44 +309,34 @@ def read_file_content(file_path: str) -> Optional[str]:
         logger.info("Attempted to read empty file: %s", file_path)
         return "" # Return empty string for empty files
 
-    try:
-        # Try reading with UTF-8 first (most common)
-        with open(normalized_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    except UnicodeDecodeError:
-        logger.warning("UTF-8 decode failed for %s, attempting encoding detection.", file_path)
-        
-        detected_encoding = None
-        if chardet:
+    encodings_to_try = ['utf-8', 'latin-1']
+    
+    # If chardet is available, try to detect encoding first
+    if chardet:
+        try:
             with open(normalized_path, 'rb') as f:
                 raw_data = f.read()
             result = chardet.detect(raw_data)
-            encoding = result['encoding']
+            detected_encoding = result['encoding']
             confidence = result['confidence']
             
-            if encoding and confidence > 0.8:
-                detected_encoding = encoding
-                logger.info("Detected encoding for %s: %s (confidence: %.2f)", file_path, encoding, confidence)
+            if detected_encoding and confidence > 0.8:
+                # Prioritize detected encoding if confident
+                encodings_to_try.insert(0, detected_encoding)
+                logger.debug("Detected encoding for %s: %s (confidence: %.2f)", file_path, detected_encoding, confidence)
             else:
-                logger.warning("Chardet detection for %s was inconclusive (encoding: %s, confidence: %.2f), trying common fallbacks.", file_path, encoding, confidence)
-        
-        if detected_encoding:
-            try:
-                with open(normalized_path, 'r', encoding=detected_encoding) as f:
-                    return f.read()
-            except (UnicodeDecodeError, LookupError) as e:
-                raise FileReadError(f"Failed to decode file {file_path} with detected encoding {detected_encoding}: {e}") from e
-        
-        # Fallback to common encodings if chardet fails or is not available or not confident
-        for fallback_encoding in ['utf-16', 'latin-1']:
-            try:
-                with open(normalized_path, 'r', encoding=fallback_encoding) as f:
-                    logger.info("Successfully read %s with fallback encoding: %s", file_path, fallback_encoding)
-                    return f.read()
-            except (UnicodeDecodeError, LookupError):
-                continue
-        
-        # If all attempts fail, raise an error
-        raise FileReadError(f"Failed to decode file {file_path} with any supported encoding.")
-    except (IOError, OSError) as e:
-        raise FileReadError(f"Error reading file {file_path}: {e}") from e
+                logger.debug("Chardet detection for %s was inconclusive (encoding: %s, confidence: %.2f), trying common fallbacks.", file_path, detected_encoding, confidence)
+        except Exception as e:
+            logger.warning("Chardet detection failed for %s: %s", file_path, e)
+
+    for encoding in encodings_to_try:
+        try:
+            with open(normalized_path, 'r', encoding=encoding) as f:
+                return f.read()
+        except UnicodeDecodeError:
+            logger.debug("Failed to decode %s with encoding %s.", file_path, encoding)
+        except (IOError, OSError) as e:
+            raise FileReadError(f"Error reading file {file_path} with encoding {encoding}: {e}") from e
+    
+    # If all attempts fail, raise an error
+    raise FileReadError(f"Failed to decode file {file_path} with any supported encoding.")

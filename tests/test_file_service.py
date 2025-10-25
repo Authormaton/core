@@ -20,10 +20,11 @@ from services.file_service import (
     list_uploads,
     delete_upload,
     cleanup_old_uploads,
+    read_file_content,
     UPLOAD_DIR,
     DEFAULT_MAX_UPLOAD_BYTES,
 )
-from services.exceptions import DocumentSaveError
+from services.exceptions import DocumentSaveError, FileReadError, FileReadError
 
 # Mock UPLOAD_DIR for testing
 @pytest.fixture(autouse=True)
@@ -391,3 +392,111 @@ class TestFileService:
         mock_get_running_loop.assert_called_once()
         mock_loop.run_in_executor.assert_called_once_with(mock_get_thread_pool.return_value, mock_save_upload_file_with_meta, mock_upload_file, "test.txt", 1000)
         assert result == {"path": "/mock/path/file.txt", "size": 100}
+
+    # Tests for read_file_content
+    @patch('services.file_service.chardet')
+    def test_read_file_content_utf8_success(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "utf8_test.txt"
+        content = "Hello, world! This is UTF-8 content."
+        file_path.write_text(content, encoding='utf-8')
+        
+        # Mock chardet to return a low confidence or None, so UTF-8 is tried first
+        mock_chardet.detect.return_value = {'encoding': None, 'confidence': 0.0}
+        assert read_file_content(str(file_path)) == content
+        mock_chardet.detect.assert_called_once()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_latin1_success(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "latin1_test.txt"
+        content = "Grüße, Welt! This is Latin-1 content."
+        file_path.write_text(content, encoding='latin-1')
+        
+        mock_chardet.detect.return_value = {'encoding': 'latin-1', 'confidence': 0.99}
+        assert read_file_content(str(file_path)) == content
+        mock_chardet.detect.assert_called_once()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_empty_file(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "empty.txt"
+        file_path.touch()
+        assert read_file_content(str(file_path)) == ""
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_file_not_found(self, mock_chardet, tmp_path):
+        with pytest.raises(FileReadError, match="File not found"):
+            read_file_content(str(tmp_path / "non_existent.txt"))
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_is_directory(self, mock_chardet, tmp_path):
+        dir_path = tmp_path / "a_directory"
+        dir_path.mkdir()
+        with pytest.raises(FileReadError, match="Path is not a file"):
+            read_file_content(str(dir_path))
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_unresolvable_path(self, mock_chardet, tmp_path):
+        # Simulate an invalid path that Path().resolve() would fail on
+        invalid_path = "/invalid/path\0with/null_byte"
+        with pytest.raises(FileReadError, match="Invalid file path or resolution error"):
+            read_file_content(invalid_path)
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet', new=None) # Simulate chardet not being installed
+    def test_read_file_content_no_chardet_fallback_latin1(self, tmp_path):
+        file_path = tmp_path / "latin1_no_chardet.txt"
+        content = "Grüße, Welt! This is Latin-1 content."
+        file_path.write_text(content, encoding='latin-1')
+        assert read_file_content(str(file_path)) == content
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_windows_style_path(self, mock_chardet, tmp_path):
+        file_name = "windows_file.txt"
+        content = "Content from a Windows-style path."
+        # Create the file using Path for OS-agnostic creation
+        file_path = tmp_path / file_name
+        file_path.write_text(content, encoding='utf-8')
+
+        # Pass the path as a string, Path().resolve() should handle it
+        assert read_file_content(str(file_path)) == content
+        mock_chardet.detect.assert_called_once()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_relative_path(self, mock_chardet, tmp_path):
+        file_name = "relative_file.txt"
+        content = "Content from a relative path."
+        file_path = tmp_path / file_name
+        file_path.write_text(content, encoding='utf-8')
+
+        # Change current working directory to tmp_path for relative path to work
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            # Mock chardet to return a low confidence or None, so UTF-8 is tried first
+            mock_chardet.detect.return_value = {'encoding': None, 'confidence': 0.0}
+            assert read_file_content(file_name) == content
+            mock_chardet.detect.assert_called_once()
+        finally:
+            os.chdir(original_cwd)
+
+    @patch('services.file_service.chardet', new=None) # Simulate chardet not being installed
+    def test_read_file_content_unsupported_encoding(self, tmp_path):
+        file_path = tmp_path / "unsupported.txt"
+        # Create a file with an encoding not in our fallback list (e.g., Shift_JIS)
+        content = "日本語"
+        file_path.write_bytes(content.encode('shift_jis')) # Write bytes directly
+
+        with pytest.raises(FileReadError, match="Failed to decode file"):
+            read_file_content(str(file_path))
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_io_error(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "io_error.txt"
+        file_path.write_text("some content")
+
+        with patch('builtins.open', side_effect=OSError("Disk error")):
+            with pytest.raises(FileReadError, match="Error reading file"):
+                read_file_content(str(file_path))
+        mock_chardet.detect.assert_not_called()
