@@ -20,10 +20,11 @@ from services.file_service import (
     list_uploads,
     delete_upload,
     cleanup_old_uploads,
+    read_file_content,
     UPLOAD_DIR,
     DEFAULT_MAX_UPLOAD_BYTES,
 )
-from services.exceptions import DocumentSaveError
+from services.exceptions import DocumentSaveError, FileReadError, FileReadError
 
 # Mock UPLOAD_DIR for testing
 @pytest.fixture(autouse=True)
@@ -352,41 +353,155 @@ class TestFileService:
 
     # Async tests
     @pytest.mark.asyncio
-    @patch('services.file_service.save_upload_file')
+    @patch('services.file_service._get_thread_pool')
     @patch('asyncio.get_running_loop')
-    @patch('services.file_service._get_thread_pool') # Added patch
-    async def test_save_upload_file_async(self, mock_get_running_loop, mock_save_upload_file, mock_upload_file, event_loop):
+    @patch('services.file_service.save_upload_file')
+    async def test_save_upload_file_async(self, mock_save_upload_file, mock_get_running_loop, mock_get_thread_pool, mock_upload_file, event_loop):
         mock_loop = MagicMock()
         mock_get_running_loop.return_value = mock_loop
+        
         mock_save_upload_file.return_value = "/mock/path/file.txt"
 
-        # Create a real Future and set its result
+        # Mock run_in_executor to return an awaitable (a Future)
         future = asyncio.Future()
         future.set_result(mock_save_upload_file.return_value)
         mock_loop.run_in_executor.return_value = future
 
-        result = await save_upload_file_async(mock_upload_file, "test.txt")
+        result = await save_upload_file_async(mock_upload_file, "test.txt", max_bytes=1000)
 
         mock_get_running_loop.assert_called_once()
-        mock_loop.run_in_executor.assert_called_once_with(ANY, mock_save_upload_file, mock_upload_file, "test.txt", None)
+        mock_loop.run_in_executor.assert_called_once_with(mock_get_thread_pool.return_value, mock_save_upload_file, mock_upload_file, "test.txt", 1000)
         assert result == "/mock/path/file.txt"
 
     @pytest.mark.asyncio
-    @patch('services.file_service.save_upload_file_with_meta')
+    @patch('services.file_service._get_thread_pool')
     @patch('asyncio.get_running_loop')
-    @patch('services.file_service._get_thread_pool') # Added patch
-    async def test_save_upload_file_with_meta_async(self, mock_get_running_loop, mock_save_upload_file_with_meta, mock_upload_file, event_loop):
+    @patch('services.file_service.save_upload_file_with_meta')
+    async def test_save_upload_file_with_meta_async(self, mock_save_upload_file_with_meta, mock_get_running_loop, mock_get_thread_pool, mock_upload_file, event_loop):
         mock_loop = MagicMock()
         mock_get_running_loop.return_value = mock_loop
         mock_save_upload_file_with_meta.return_value = {"path": "/mock/path/file.txt", "size": 100}
 
-        # Create a real Future and set its result
-        future = mock_loop.create_future()
+        # Mock run_in_executor to return an awaitable (a Future)
+        future = asyncio.Future()
         future.set_result(mock_save_upload_file_with_meta.return_value)
         mock_loop.run_in_executor.return_value = future
 
-        result = await save_upload_file_with_meta_async(mock_upload_file, "test.txt")
+        result = await save_upload_file_with_meta_async(mock_upload_file, "test.txt", max_bytes=1000)
 
         mock_get_running_loop.assert_called_once()
-        mock_loop.run_in_executor.assert_called_once_with(ANY, mock_save_upload_file_with_meta, mock_upload_file, "test.txt", None)
+        mock_loop.run_in_executor.assert_called_once_with(mock_get_thread_pool.return_value, mock_save_upload_file_with_meta, mock_upload_file, "test.txt", 1000)
         assert result == {"path": "/mock/path/file.txt", "size": 100}
+
+    # Tests for read_file_content
+    @patch('services.file_service.chardet')
+    def test_read_file_content_utf8_success(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "utf8_test.txt"
+        content = "Hello, world! This is UTF-8 content."
+        file_path.write_text(content, encoding='utf-8')
+        
+        # Mock chardet to return a low confidence or None, so UTF-8 is tried first
+        mock_chardet.detect.return_value = {'encoding': None, 'confidence': 0.0}
+        assert read_file_content(str(file_path)) == content
+        mock_chardet.detect.assert_called_once()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_latin1_success(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "latin1_test.txt"
+        content = "Grüße, Welt! This is Latin-1 content."
+        file_path.write_text(content, encoding='latin-1')
+        
+        mock_chardet.detect.return_value = {'encoding': 'latin-1', 'confidence': 0.99}
+        assert read_file_content(str(file_path)) == content
+        mock_chardet.detect.assert_called_once()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_empty_file(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "empty.txt"
+        file_path.touch()
+        assert read_file_content(str(file_path)) == ""
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_file_not_found(self, mock_chardet, tmp_path):
+        with pytest.raises(FileReadError, match="File not found"):
+            read_file_content(str(tmp_path / "non_existent.txt"))
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_is_directory(self, mock_chardet, tmp_path):
+        dir_path = tmp_path / "a_directory"
+        dir_path.mkdir()
+        with pytest.raises(FileReadError, match="Path is not a file"):
+            read_file_content(str(dir_path))
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_unresolvable_path(self, mock_chardet, tmp_path):
+        # Simulate an invalid path that Path().resolve() would fail on
+        invalid_path = "/invalid/path\0with/null_byte"
+        with pytest.raises(FileReadError, match="Invalid file path or resolution error"):
+            read_file_content(invalid_path)
+        mock_chardet.detect.assert_not_called()
+
+    @patch('services.file_service.chardet', new=None) # Simulate chardet not being installed
+    def test_read_file_content_no_chardet_fallback_latin1(self, tmp_path):
+        file_path = tmp_path / "latin1_no_chardet.txt"
+        content = "Grüße, Welt! This is Latin-1 content."
+        file_path.write_text(content, encoding='latin-1')
+        assert read_file_content(str(file_path)) == content
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_windows_style_path(self, mock_chardet, tmp_path):
+        file_name = "windows_file.txt"
+        content = "Content from a Windows-style path."
+        # Create the file using Path for OS-agnostic creation
+        file_path = tmp_path / file_name
+        file_path.write_text(content, encoding='utf-8')
+
+        # Ensure chardet is effectively ignored so UTF-8 is tried first
+        mock_chardet.detect.return_value = {'encoding': None, 'confidence': 0.0}
+        # Pass the path as a string, Path().resolve() should handle it
+        assert read_file_content(str(file_path)) == content
+        mock_chardet.detect.assert_called_once()
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_relative_path(self, mock_chardet, tmp_path):
+        file_name = "relative_file.txt"
+        content = "Content from a relative path."
+        file_path = tmp_path / file_name
+        file_path.write_text(content, encoding='utf-8')
+
+        # Change current working directory to tmp_path for relative path to work
+        original_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            # Mock chardet to return a low confidence or None, so UTF-8 is tried first
+            mock_chardet.detect.return_value = {'encoding': None, 'confidence': 0.0}
+            assert read_file_content(file_name) == content
+            mock_chardet.detect.assert_called_once()
+        finally:
+            os.chdir(original_cwd)
+
+    @patch('services.file_service.chardet', new=None) # Simulate chardet not being installed
+    def test_read_file_content_unsupported_encoding(self, tmp_path):
+        dummy_path = str(tmp_path / "unsupported.txt")
+        Path(dummy_path).write_bytes(b"x")  # ensure file exists and path checks pass
+        m = mock_open()
+        m.return_value.read.side_effect = [
+            UnicodeDecodeError("utf-8", b"", 0, 1, "bad"),
+            UnicodeDecodeError("latin-1", b"", 0, 1, "bad"),
+        ]
+        with patch('builtins.open', m):
+            with pytest.raises(FileReadError, match="Failed to decode file|Error reading file"):
+                read_file_content(dummy_path)
+
+    @patch('services.file_service.chardet')
+    def test_read_file_content_io_error(self, mock_chardet, tmp_path):
+        file_path = tmp_path / "io_error.txt"
+        file_path.write_text("some content")
+
+        with patch('builtins.open', side_effect=OSError("Disk error")):
+            with pytest.raises(FileReadError, match="Error reading file"):
+                read_file_content(str(file_path))
+        mock_chardet.detect.assert_not_called()
