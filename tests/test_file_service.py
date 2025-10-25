@@ -352,41 +352,42 @@ class TestFileService:
 
     # Async tests
     @pytest.mark.asyncio
-    @patch('services.file_service.save_upload_file')
+    @patch('services.file_service._get_thread_pool')
     @patch('asyncio.get_running_loop')
-    @patch('services.file_service._get_thread_pool') # Added patch
-    async def test_save_upload_file_async(self, mock_get_running_loop, mock_save_upload_file, mock_upload_file, event_loop):
+    @patch('services.file_service.save_upload_file')
+    async def test_save_upload_file_async(self, mock_save_upload_file, mock_get_running_loop, mock_get_thread_pool, mock_upload_file, event_loop):
         mock_loop = MagicMock()
         mock_get_running_loop.return_value = mock_loop
+        
         mock_save_upload_file.return_value = "/mock/path/file.txt"
 
-        # Create a real Future and set its result
+        # Mock run_in_executor to return an awaitable (a Future)
         future = asyncio.Future()
         future.set_result(mock_save_upload_file.return_value)
         mock_loop.run_in_executor.return_value = future
 
-        result = await save_upload_file_async(mock_upload_file, "test.txt")
+        result = await save_upload_file_async(mock_upload_file, "test.txt", max_bytes=1000)
 
         mock_get_running_loop.assert_called_once()
-        mock_loop.run_in_executor.assert_called_once_with(ANY, mock_save_upload_file, mock_upload_file, "test.txt", None)
+        mock_loop.run_in_executor.assert_called_once_with(mock_get_thread_pool.return_value, mock_save_upload_file, mock_upload_file, "test.txt", 1000)
         assert result == "/mock/path/file.txt"
 
     @pytest.mark.asyncio
-    @patch('services.file_service.save_upload_file_with_meta')
+    @patch('services.file_service._get_thread_pool')
     @patch('asyncio.get_running_loop')
-    @patch('services.file_service._get_thread_pool') # Added patch
-    async def test_save_upload_file_with_meta_async(self, mock_get_running_loop, mock_save_upload_file_with_meta, mock_upload_file, event_loop):
+    @patch('services.file_service.save_upload_file_with_meta')
+    async def test_save_upload_file_with_meta_async(self, mock_save_upload_file_with_meta, mock_get_running_loop, mock_get_thread_pool, mock_upload_file, event_loop):
         mock_loop = MagicMock()
         mock_get_running_loop.return_value = mock_loop
         mock_save_upload_file_with_meta.return_value = {"path": "/mock/path/file.txt", "size": 100}
 
-        # Create a real Future and set its result
-        future = mock_loop.create_future()
+        # Mock run_in_executor to return an awaitable (a Future)
+        future = asyncio.Future()
         future.set_result(mock_save_upload_file_with_meta.return_value)
         mock_loop.run_in_executor.return_value = future
 
-        result = await save_upload_file_with_meta_async(mock_upload_file, "test.txt")
+        result = await save_upload_file_with_meta_async(mock_upload_file, "test.txt", max_bytes=1000)
 
         mock_get_running_loop.assert_called_once()
-        mock_loop.run_in_executor.assert_called_once_with(ANY, mock_save_upload_file_with_meta, mock_upload_file, "test.txt", None)
+        mock_loop.run_in_executor.assert_called_once_with(mock_get_thread_pool.return_value, mock_save_upload_file_with_meta, mock_upload_file, "test.txt", 1000)
         assert result == {"path": "/mock/path/file.txt", "size": 100}
