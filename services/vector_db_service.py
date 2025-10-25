@@ -7,8 +7,19 @@ Service for storing and retrieving vectors using Pinecone (scaffold).
 from typing import List
 from config.settings import settings
 from services.logging_config import get_logger
+from tenacity import retry, wait_exponential, stop_after_attempt, stop_after_delay, retry_if_exception_type
+from pinecone import Pinecone
+from pinecone.exceptions import PineconeException, PineconeProtocolError
 
 logger = get_logger(__name__)
+
+# Define a custom retry decorator for Pinecone operations
+pinecone_retry = retry(
+    stop=stop_after_attempt(settings.pinecone_max_retries) | stop_after_delay(settings.pinecone_timeout),
+    wait=wait_exponential(multiplier=settings.pinecone_min_retry_delay, max=settings.pinecone_max_retry_delay),
+    retry=retry_if_exception_type(PineconeException),
+    reraise=True
+)
 
 class VectorDBClient:
     def __init__(self, dimension: int = None, index_name: str = None, pinecone_client=None, pinecone_index=None):
@@ -29,6 +40,7 @@ class VectorDBClient:
         self.index = pinecone_index
         self.dimension = dimension or settings.embedding_dimension
 
+    @pinecone_retry
     def _get_index_description(self, index_name: str):
         """Helper to get index description, returns None if not found."""
         try:
@@ -72,6 +84,7 @@ class VectorDBClient:
                 self.index = self.pc.Index(idx_name)
             logger.info("Connected to existing Pinecone index '%s'.", idx_name)
 
+    @pinecone_retry
     def upsert_vectors(self, vectors: List[List[float]], ids: List[str]):
         # Input validation
         if vectors is None or ids is None:
@@ -89,6 +102,7 @@ class VectorDBClient:
         self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)])
         logger.debug("Upserted %d vectors into Pinecone index.", len(vectors))
     
+    @pinecone_retry
     def upsert(self, namespace, ids, vectors, metadata=None):
         """
         Upsert vectors into the index, ensuring index is created and metadata is validated.
@@ -114,6 +128,7 @@ class VectorDBClient:
         self.index.upsert(vectors=items, namespace=namespace)
         logger.debug("Upserted %d items into namespace '%s'.", len(items), namespace)
 
+    @pinecone_retry
     def query(self, vector: List[float], top_k: int = 5):
         if not self.index:
             logger.error("Attempted query before index was initialized.")
