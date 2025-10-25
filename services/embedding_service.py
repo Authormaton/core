@@ -4,12 +4,14 @@ Service for generating embeddings for text chunks using transformers.
 
 
 import os
+import logging
 from typing import List
 from openai import OpenAI, APIConnectionError, APIError, AuthenticationError, RateLimitError
 import time
 import random
 from config.settings import settings
 from services.logging_config import get_logger
+from tenacity import retry, wait_exponential, stop_after_attempt, before_log, after_log, retry_if_exception_type
 
 logger = get_logger(__name__)
 from services.exceptions import DocumentEmbeddingError
@@ -21,31 +23,23 @@ def get_openai_api_key() -> str:
         raise ValueError("OPENAI_API_KEY not set in environment.")
     return api_key
 
-def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout: float = 30.0, max_retries: int = 2) -> List[List[float]]:
+@retry(
+    retry=retry_if_exception_type((RateLimitError, APIConnectionError, APIError)),
+    wait=wait_exponential(multiplier=1, min=2, max=60),
+    stop=stop_after_attempt(max_retries),
+    before=before_log(logger, logging.INFO),
+    after=after_log(logger, logging.INFO),
+)
+def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout: float = 30.0, max_retries: int = 3) -> List[List[float]]:
     """
     Generate embeddings for a list of texts using OpenAI's embedding API (v1 client).
     Returns a list of embedding vectors (as lists of floats).
-    Retries on rate limit, with exponential backoff.
     """
     if not texts:
         return []
-    client = OpenAI(api_key=get_openai_api_key(), timeout=timeout, max_retries=max_retries)
-    for attempt in range(max_retries + 1):
-        try:
-            response = client.embeddings.create(input=texts, model=model)
-            return [item.embedding for item in response.data]
-        except AuthenticationError as e:
-            logger.exception("Authentication error with OpenAI API.")
-            raise
-        except RateLimitError as e:
-            logger.warning("Rate limit hit with OpenAI API, retrying...")
-            if attempt == max_retries:
-                logger.exception("Max retries reached for OpenAI API rate limit.")
-                raise
-            time.sleep(2 ** attempt + random.random())
-        except (APIConnectionError, APIError) as e:
-            logger.exception("OpenAI API connection or general API error.")
-            raise
+    client = OpenAI(api_key=get_openai_api_key(), timeout=timeout)
+    response = client.embeddings.create(input=texts, model=model)
+    return [item.embedding for item in response.data]
 
 def embed_texts_batched(texts: List[str]) -> List[List[float]]:
     batch_size = settings.embed_batch_size
