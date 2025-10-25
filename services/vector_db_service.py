@@ -5,13 +5,24 @@ Service for storing and retrieving vectors using Pinecone (scaffold).
 
 # To use: pip install pinecone-client
 from typing import List
-from config.settings import settings
 from services.logging_config import get_logger
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed, before_sleep_log
+import logging
+from pinecone import ServerlessSpec
 
 logger = get_logger(__name__)
 
 class VectorDBClient:
-    def __init__(self, dimension: int = None, index_name: str = None, pinecone_client=None, pinecone_index=None):
+    def __init__(
+        self,
+        dimension: int,
+        index_name: str,
+        pinecone_api_key: str,
+        pinecone_cloud: str,
+        pinecone_region: str,
+        pinecone_client=None,
+        pinecone_index=None,
+    ):
         """
         Initialize Pinecone client for serverless (cloud/region).
         Loads API key and config from settings.
@@ -20,10 +31,10 @@ class VectorDBClient:
             self.pc = pinecone_client
         else:
             from pinecone import Pinecone
-            self.pc = Pinecone(api_key=settings.pinecone_api_key.get_secret_value())
+            self.pc = Pinecone(api_key=pinecone_api_key)
 
-        self.cloud = settings.pinecone_cloud
-        self.region = settings.pinecone_region
+        self.cloud = pinecone_cloud
+        self.region = pinecone_region
         logger.info("Pinecone client initialized for cloud: %s, region: %s", self.cloud, self.region)
         self.index_name = index_name or settings.pinecone_index_name
         self.index = pinecone_index

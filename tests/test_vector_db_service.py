@@ -31,22 +31,37 @@ class MockPinecone:
 @pytest.fixture
 def vdb():
     mock_pinecone_client = MockPinecone(api_key="test-api-key")
-    svc = VectorDBClient(dimension=8, index_name="test-index", pinecone_client=mock_pinecone_client, pinecone_index=mock_pinecone_client.Index("test-index"))
+    svc = VectorDBClient(
+        dimension=3072,
+        index_name="test-index",
+        pinecone_client=mock_pinecone_client,
+        pinecone_index=mock_pinecone_client.Index("test-index"),
+        pinecone_api_key="test-api-key",
+        pinecone_cloud="aws",
+        pinecone_region="us-west-2",
+    )
     return svc
 
 def test_create_index():
     mock_pinecone_client = MockPinecone(api_key="test-api-key")
     mock_pinecone_client.describe_index = lambda name: None # Simulate index not found
     mock_pinecone_client.create_index = lambda name, dimension, spec: None # Mock create_index
-    mock_pinecone_client.Index = lambda name: DummyIndex(dimension=8) # Mock Index
+    mock_pinecone_client.Index = lambda name: DummyIndex(dimension=3072) # Mock Index
 
-    svc = VectorDBClient(dimension=8, index_name="test-index", pinecone_client=mock_pinecone_client)
+    svc = VectorDBClient(
+        dimension=3072,
+        index_name="test-index",
+        pinecone_client=mock_pinecone_client,
+        pinecone_api_key="test-api-key",
+        pinecone_cloud="aws",
+        pinecone_region="us-west-2",
+    )
     svc.create_index()
-    assert svc.index.dimension == 8
+    assert svc.index.dimension == 3072
 
 def test_upsert_vectors(vdb):
     ids = ["id1", "id2"]
-    vectors = [[0.0]*8, [1.0]*8]
+    vectors = [[0.0]*3072, [1.0]*3072]
     vdb.upsert_vectors(vectors, ids)
     assert len(vdb.index.upserted) == 2
     # Wrong dimension
@@ -54,7 +69,7 @@ def test_upsert_vectors(vdb):
         vdb.upsert_vectors([[0.0]*5, [1.0]*5], ids)
 
 def test_query(vdb):
-    vector = [0.0]*8
+    vector = [0.0]*3072
     result = vdb.query(vector)
     assert result['matches'][0]['id'] == 'id1'
     # Wrong dimension
