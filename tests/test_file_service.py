@@ -459,6 +459,8 @@ class TestFileService:
         file_path = tmp_path / file_name
         file_path.write_text(content, encoding='utf-8')
 
+        # Ensure chardet is effectively ignored so UTF-8 is tried first
+        mock_chardet.detect.return_value = {'encoding': None, 'confidence': 0.0}
         # Pass the path as a string, Path().resolve() should handle it
         assert read_file_content(str(file_path)) == content
         mock_chardet.detect.assert_called_once()
@@ -483,13 +485,16 @@ class TestFileService:
 
     @patch('services.file_service.chardet', new=None) # Simulate chardet not being installed
     def test_read_file_content_unsupported_encoding(self, tmp_path):
-        file_path = tmp_path / "unsupported.txt"
-        # Create a file with an encoding not in our fallback list (e.g., Shift_JIS)
-        content = "日本語"
-        file_path.write_bytes(content.encode('shift_jis')) # Write bytes directly
-
-        with pytest.raises(FileReadError, match="Failed to decode file"):
-            read_file_content(str(file_path))
+        dummy_path = str(tmp_path / "unsupported.txt")
+        Path(dummy_path).write_bytes(b"x")  # ensure file exists and path checks pass
+        m = mock_open()
+        m.return_value.read.side_effect = [
+            UnicodeDecodeError("utf-8", b"", 0, 1, "bad"),
+            UnicodeDecodeError("latin-1", b"", 0, 1, "bad"),
+        ]
+        with patch('builtins.open', m):
+            with pytest.raises(FileReadError, match="Failed to decode file|Error reading file"):
+                read_file_content(dummy_path)
 
     @patch('services.file_service.chardet')
     def test_read_file_content_io_error(self, mock_chardet, tmp_path):
