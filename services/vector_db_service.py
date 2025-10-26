@@ -6,8 +6,6 @@ Service for storing and retrieving vectors using Pinecone (scaffold).
 # To use: pip install pinecone-client
 from typing import List
 from services.logging_config import get_logger
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed, before_sleep_log
-import logging
 from pinecone import ServerlessSpec
 
 logger = get_logger(__name__)
@@ -51,7 +49,6 @@ class VectorDBClient:
             return None
 
     def create_index(self, index_name: str = None, dimension: int = None):
-        from pinecone import ServerlessSpec
         idx_name = index_name or self.index_name
         dim = dimension or self.dimension
         

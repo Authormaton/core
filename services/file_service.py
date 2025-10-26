@@ -17,8 +17,13 @@ import asyncio
 import mimetypes
 from datetime import datetime, timezone, timedelta
 from typing import IO, Optional, List, Dict, Any
-from services.exceptions import DocumentSaveError
+from services.exceptions import DocumentSaveError, FileReadError
 from concurrent.futures import ThreadPoolExecutor
+
+try:
+    import chardet
+except ImportError:
+    chardet = None
 
 DEFAULT_MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(50 * 1024 * 1024)))  # 50 MiB
 _ENV_UPLOAD_DIR = os.environ.get("UPLOAD_DIR")
