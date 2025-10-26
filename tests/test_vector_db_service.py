@@ -1,7 +1,9 @@
 
 
 import pytest
+from unittest.mock import MagicMock, patch, ANY
 from services.vector_db_service import VectorDBClient
+from pinecone import PineconeException
 
 
 class DummyIndex:
