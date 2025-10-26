@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -6,12 +7,13 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.indexing_router import router as indexing_router
-from services.logging_config import setup_logging
+from services.logging_config import setup_logging, get_logger
 from services.web_fetch_service import WebFetchService
 from api.endpoints.internal import router as internal_router
 from api.endpoints.upload import router as upload_router
 from api.endpoints.web_answering import router as web_answering_router
 
+logger = get_logger(__name__)
 
 # Parse CORS_ALLOW_ORIGINS from env (comma-separated)
 def get_cors_origins():
@@ -78,4 +80,5 @@ app.include_router(indexing_router)
 
 @app.get("/health")
 def health():
+    logger.info("Health check successful", extra={"endpoint": "/health", "status": "ok"})
     return {"status": "ok"}

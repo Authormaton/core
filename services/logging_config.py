@@ -29,9 +29,9 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         base: Dict[str, Any] = {
-            "time": self.formatTime(record, self.datefmt),
+            "timestamp": self.formatTime(record, self.datefmt),
             "level": record.levelname,
-            "logger": record.name,
+            "service": record.name,
             "message": record.getMessage(),
             "pid": self.pid,
             "host": self.hostname,
@@ -39,19 +39,19 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             base["exc_text"] = self.formatException(record.exc_info)
         base.update(_log_context.get())
-        excluded = {
-            "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
-            "module", "exc_info", "stack_info", "lineno", "funcName", "created",
-            "msecs", "relativeCreated", "thread", "threadName", "processName", "process"
-        }
+        # Add any extra fields from the log record, excluding standard ones
         for k, v in record.__dict__.items():
-            if k in excluded:
-                continue
-            try:
-                json.dumps({k: v})
-                base[k] = v
-            except Exception:
-                base[k] = str(v)
+            if k not in base and not k.startswith('_') and k not in {
+                "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+                "module", "exc_info", "stack_info", "lineno", "funcName", "created",
+                "msecs", "relativeCreated", "thread", "threadName", "processName", "process",
+                "message" # 'message' is already handled
+            }:
+                try:
+                    json.dumps({k: v}) # Check if serializable
+                    base[k] = v
+                except TypeError:
+                    base[k] = repr(v) # Fallback for non-serializable objects
         if self.pretty:
             return json.dumps(base, ensure_ascii=False, indent=2)
         return json.dumps(base, ensure_ascii=False, separators=(",", ":"))
