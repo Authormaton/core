@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     embedding_dimension: int = 3072
     embed_batch_size: int = 128
     max_upload_mb: int = 25
+
+    # Vector DB Retry and Timeout Settings
+    vector_db_max_retries: int = Field(default=3, ge=0)
+    vector_db_initial_backoff: float = Field(default=0.5, ge=0)  # seconds
+    vector_db_timeout: float = Field(default=30.0, ge=0)  # seconds
     
     # Web search settings
     web_search_engine: str = os.environ.get("WEB_SEARCH_ENGINE", "dummy")  # Default to dummy provider if not specified
@@ -36,5 +41,7 @@ class Settings(BaseSettings):
 try:
     settings = Settings()
 except ValidationError as e:
-    print(f"[FATAL] Invalid or missing environment variables: {e}", file=sys.stderr)
-    sys.exit(1)
+    # Only exit if not in a test environment
+    if os.environ.get("TESTING") != "True":
+        print(f"[FATAL] Invalid or missing environment variables: {e}", file=sys.stderr)
+        sys.exit(1)

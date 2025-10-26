@@ -6,12 +6,23 @@ Service for storing and retrieving vectors using Pinecone (scaffold).
 # To use: pip install pinecone-client
 from typing import List
 from services.logging_config import get_logger
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed, before_sleep_log
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type, wait_fixed, before_sleep_log, wait_random_exponential
 import logging
 from pinecone import ServerlessSpec
+from config.settings import settings
 
 logger = get_logger(__name__)
 
+# Define a common retry decorator for Pinecone operations
+# This will retry on any exception, with exponential backoff
+# and a maximum number of attempts, logging before each retry.
+pinecone_retry = retry(
+    stop=stop_after_attempt(settings.vector_db_max_retries),
+    wait=wait_random_exponential(multiplier=settings.vector_db_initial_backoff, min=0.5, max=60),
+    retry=retry_if_exception_type(Exception),  # Retry on any exception for now
+    before_sleep=before_sleep_log(logger, logging.INFO, exc_info=True),
+    reraise=True
+)
 class VectorDBClient:
     def __init__(
         self,
@@ -40,6 +51,7 @@ class VectorDBClient:
         self.index = pinecone_index
         self.dimension = dimension or settings.embedding_dimension
 
+    @pinecone_retry
     def _get_index_description(self, index_name: str):
         """Helper to get index description, returns None if not found."""
         try:
@@ -50,6 +62,7 @@ class VectorDBClient:
             logger.debug("Index '%s' not found or error describing it: %s", index_name, e)
             return None
 
+    @pinecone_retry
     def create_index(self, index_name: str = None, dimension: int = None):
         from pinecone import ServerlessSpec
         idx_name = index_name or self.index_name
@@ -64,6 +77,7 @@ class VectorDBClient:
                 name=idx_name,
                 dimension=dim,
                 spec=ServerlessSpec(cloud=self.cloud, region=self.region),
+                timeout=settings.vector_db_timeout
             )
             if self.index is None:
                 self.index = self.pc.Index(idx_name)
@@ -83,6 +97,7 @@ class VectorDBClient:
                 self.index = self.pc.Index(idx_name)
             logger.info("Connected to existing Pinecone index '%s'.", idx_name)
 
+    @pinecone_retry
     def upsert_vectors(self, vectors: List[List[float]], ids: List[str]):
         # Input validation
         if vectors is None or ids is None:
@@ -97,9 +112,10 @@ class VectorDBClient:
         if not self.index:
             logger.error("Attempted upsert before index was initialized.")
             raise RuntimeError("Index is not initialized. Call create_index first.")
-        self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)])
+        self.index.upsert(vectors=[(id, vec) for id, vec in zip(ids, vectors)], timeout=settings.vector_db_timeout)
         logger.debug("Upserted %d vectors into Pinecone index.", len(vectors))
     
+    @pinecone_retry
     def upsert(self, namespace, ids, vectors, metadata=None):
         """
         Upsert vectors into the index, ensuring index is created and metadata is validated.
@@ -122,9 +138,10 @@ class VectorDBClient:
             if metadata is not None:
                 item["metadata"] = metadata[i]
             items.append(item)
-        self.index.upsert(vectors=items, namespace=namespace)
+        self.index.upsert(vectors=items, namespace=namespace, timeout=settings.vector_db_timeout)
         logger.debug("Upserted %d items into namespace '%s'.", len(items), namespace)
 
+    @pinecone_retry
     def query(self, vector: List[float], top_k: int = 5):
         if not self.index:
             logger.error("Attempted query before index was initialized.")
@@ -133,5 +150,5 @@ class VectorDBClient:
             logger.error("Query vector dimensionality mismatch with index.")
             raise ValueError("query vector dimensionality mismatch with index.")
         logger.debug("Querying Pinecone index with top_k=%d.", top_k)
-        return self.index.query(vector=vector, top_k=top_k)
+        return self.index.query(vector=vector, top_k=top_k, timeout=settings.vector_db_timeout)
 
