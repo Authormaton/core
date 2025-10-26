@@ -3,7 +3,7 @@
 Service for storing and retrieving vectors using Pinecone (scaffold).
 """
 
-# To use: pip install pinecone-client
+# To use: pip install pinecone
 from typing import List
 from services.logging_config import get_logger
 from pinecone import ServerlessSpec

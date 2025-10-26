@@ -329,7 +329,9 @@ def read_file_content(file_path: str) -> Optional[str]:
         if detected_encoding:
             try:
                 with open(normalized_path, 'r', encoding=detected_encoding) as f:
-                    return f.read()
+                    content = f.read()
+                logger.info("Successfully read %s with detected encoding: %s", file_path, detected_encoding)
+                return content
             except (UnicodeDecodeError, LookupError) as e:
                 raise FileReadError(f"Failed to decode file {file_path} with detected encoding {detected_encoding}: {e}") from e
         
@@ -337,8 +339,9 @@ def read_file_content(file_path: str) -> Optional[str]:
         for fallback_encoding in ['utf-16', 'latin-1']:
             try:
                 with open(normalized_path, 'r', encoding=fallback_encoding) as f:
-                    logger.info("Successfully read %s with fallback encoding: %s", file_path, fallback_encoding)
-                    return f.read()
+                    content = f.read()
+                logger.info("Successfully read %s with fallback encoding: %s", file_path, fallback_encoding)
+                return content
             except (UnicodeDecodeError, LookupError):
                 continue
         

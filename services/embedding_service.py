@@ -23,14 +23,16 @@ def get_openai_api_key() -> str:
         raise ValueError("OPENAI_API_KEY not set in environment.")
     return api_key
 
+MAX_RETRIES = 3
+
 @retry(
     retry=retry_if_exception_type((RateLimitError, APIConnectionError, APIError)),
     wait=wait_exponential(multiplier=1, min=2, max=60),
-    stop=stop_after_attempt(max_retries),
+    stop=stop_after_attempt(MAX_RETRIES),
     before=before_log(logger, logging.INFO),
     after=after_log(logger, logging.INFO),
 )
-def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout: float = 30.0, max_retries: int = 3) -> List[List[float]]:
+def embed_texts(texts: List[str], model: str = "text-embedding-3-small", timeout: float = 30.0) -> List[List[float]]:
     """
     Generate embeddings for a list of texts using OpenAI's embedding API (v1 client).
     Returns a list of embedding vectors (as lists of floats).

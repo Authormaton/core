@@ -17,7 +17,7 @@ def test_health():
 
 def test_health_log_structure(caplog):
     import logging
-    import json
+
     from services.logging_config import JsonFormatter
 
     caplog.set_level(logging.INFO)

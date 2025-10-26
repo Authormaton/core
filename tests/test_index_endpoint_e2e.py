@@ -1,41 +1,4 @@
 
-# Patch config.settings and env vars before any other imports
-import sys
-import types
-import os
-from pydantic import SecretStr
-
-# Set required env vars and patch config.settings before any other imports
-os.environ["INTERNAL_API_KEY"] = "test-key"
-
-class DummySettings:
-    pinecone_api_key = SecretStr("test-key")
-    pinecone_cloud = "aws"
-    pinecone_region = "us-east-1"
-    pinecone_index_name = "authormaton-core"
-    embedding_model = "test-model"
-    embedding_dimension = 16
-    embed_batch_size = 64
-    max_upload_mb = 25
-
-dummy_config = types.ModuleType("config.settings")
-dummy_config.settings = DummySettings()
-sys.modules["config.settings"] = dummy_config
-
-# Patch Pinecone client for tests to avoid real API calls
-from unittest.mock import MagicMock
-mock_pc = MagicMock()
-mock_pc.list_indexes.return_value = []
-mock_pc.create_index.return_value = None
-mock_pc.Index.return_value = MagicMock()
-mock_pc.describe_index.return_value = {"dimension": 16}
-
-mock_pinecone = MagicMock()
-mock_pinecone.Pinecone = MagicMock(return_value=mock_pc)
-mock_pinecone.ServerlessSpec = MagicMock()
-sys.modules["pinecone"] = mock_pinecone
-
-# Now import everything else
 from dotenv import load_dotenv
 load_dotenv()
 from fastapi.testclient import TestClient

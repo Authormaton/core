@@ -43,6 +43,11 @@ class WebFetchService:
     Uses asyncio for concurrent fetching with rate limiting via semaphore.
     """
     MAX_REDIRECTS = 5  # Maximum number of redirects to follow
+
+    def __init__(
+        self,
+        max_concurrency: Optional[int] = None,
+    ):
         """
         Initialize the web fetch service.
         

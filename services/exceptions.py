@@ -21,3 +21,13 @@ class DocumentChunkError(DocumentProcessingError):
 class DocumentEmbeddingError(DocumentProcessingError):
     """Raised when embedding generation fails."""
     pass
+
+
+class FileReadError(DocumentProcessingError):
+    """Raised when reading or decoding a file fails."""
+    pass
+
+
+class FileReadError(DocumentProcessingError):
+    """Raised when reading or decoding a file fails."""
+    pass

@@ -30,7 +30,11 @@ class IndexResponse(BaseModel):
 
 def get_vector_db_service(request: IndexRequest) -> VectorDBService:
     return VectorDBService(
-        dimension=settings.embedding_dimension, index_name=request.project_id
+        dimension=settings.embedding_dimension,
+        index_name=request.project_id,
+        pinecone_api_key=settings.pinecone_api_key.get_secret_value(),
+        pinecone_cloud=settings.pinecone_cloud,
+        pinecone_region=settings.pinecone_region,
     )
 
 
