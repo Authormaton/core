@@ -1,3 +1,4 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -12,6 +13,8 @@ from api.endpoints.internal import router as internal_router
 from api.endpoints.upload import router as upload_router
 from api.endpoints.web_answering import router as web_answering_router
 
+
+logger = logging.getLogger(__name__)
 
 # Parse CORS_ALLOW_ORIGINS from env (comma-separated)
 def get_cors_origins():
@@ -78,4 +81,5 @@ app.include_router(indexing_router)
 
 @app.get("/health")
 def health():
+    logger.info("Health check requested")
     return {"status": "ok"}

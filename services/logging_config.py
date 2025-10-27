@@ -22,6 +22,7 @@ class JsonFormatter(logging.Formatter):
         self.pretty = pretty
         self.hostname = socket.gethostname()
         self.pid = os.getpid()
+        self.service_name = os.getenv("SERVICE_NAME", "authormaton-core")
 
     def formatTime(self, record: logging.LogRecord, datefmt: Optional[str] = None) -> str:
         dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
@@ -31,6 +32,7 @@ class JsonFormatter(logging.Formatter):
         base: Dict[str, Any] = {
             "time": self.formatTime(record, self.datefmt),
             "level": record.levelname,
+            "service": self.service_name,
             "logger": record.name,
             "message": record.getMessage(),
             "pid": self.pid,
