@@ -32,6 +32,8 @@ class Settings(BaseSettings):
     bing_api_key: Optional[SecretStr] = None
     max_fetch_concurrency: int = 4
     default_top_k_results: int = 8
+    web_fetch_cache_maxsize: int = 1000
+    web_fetch_cache_ttl_seconds: int = 300
 
 try:
     settings = Settings()
